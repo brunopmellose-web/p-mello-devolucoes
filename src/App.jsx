@@ -23,10 +23,15 @@ function App() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [modo, setModo] = useState('login')
+
   const [cidades, setCidades] = useState([])
   const [devolucoes, setDevolucoes] = useState([])
   const [pendentes, setPendentes] = useState([])
   const [perfisEscolhidos, setPerfisEscolhidos] = useState({})
+
+  const [nomesEntregadores, setNomesEntregadores] = useState({})
+  const [recebendoId, setRecebendoId] = useState(null)
+
   const [codigo, setCodigo] = useState('')
   const [cidadeId, setCidadeId] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -50,7 +55,9 @@ function App() {
     setUsuario(sessao.user)
 
     if (error) {
-      setErro('Não foi possível consultar seu perfil. Verifique as permissões do Supabase.')
+      setErro(
+        'Não foi possível consultar seu perfil. Verifique as permissões do Supabase.'
+      )
       setPerfil(null)
       return
     }
@@ -63,6 +70,121 @@ function App() {
     setErro('')
     setPerfil(data)
   }, [])
+
+  async function carregarDevolucoes() {
+    const { data, error } = await supabase
+      .from('returns')
+      .select(`
+        id,
+        codigo_rastreio,
+        cidade_id,
+        entregador_id,
+        motivo,
+        detalhes_motivo,
+        status,
+        criado_em,
+        recebido_por,
+        recebido_em
+      `)
+      .order('criado_em', { ascending: false })
+      .limit(200)
+
+    if (error) {
+      setErro(
+        'Não foi possível carregar as devoluções. Verifique as permissões do banco.'
+      )
+      return
+    }
+
+    const lista = data || []
+    setDevolucoes(lista)
+
+    const idsEntregadores = [
+      ...new Set(
+        lista
+          .map((item) => item.entregador_id)
+          .filter(Boolean)
+      ),
+    ]
+
+    if (idsEntregadores.length === 0) {
+      setNomesEntregadores({})
+      return
+    }
+
+    const { data: perfisEntregadores, error: erroPerfis } =
+      await supabase
+        .from('profiles')
+        .select('id, nome')
+        .in('id', idsEntregadores)
+
+    if (erroPerfis) {
+      setNomesEntregadores({})
+      setErro(
+        'As devoluções foram carregadas, mas não foi possível consultar os nomes dos entregadores. Confira as permissões de leitura dos perfis no Supabase.'
+      )
+      return
+    }
+
+    const mapaNomes = Object.fromEntries(
+      (perfisEntregadores || []).map((item) => [
+        item.id,
+        item.nome,
+      ])
+    )
+
+    setNomesEntregadores(mapaNomes)
+  }
+
+  async function carregarPendentes() {
+    const { data, error } = await supabase.rpc(
+      'listar_cadastros_pendentes'
+    )
+
+    if (error) {
+      setErro(
+        'Não foi possível consultar os cadastros pendentes. Confirme as funções de aprovação no Supabase.'
+      )
+      return
+    }
+
+    setPendentes(data || [])
+  }
+
+  async function confirmarRecebimento(devolucaoId) {
+    const confirmar = window.confirm(
+      'Confirma que este pacote foi recebido fisicamente pela base?'
+    )
+
+    if (!confirmar) return
+
+    setErro('')
+    setSucesso('')
+    setRecebendoId(devolucaoId)
+
+    try {
+      const { error } = await supabase.rpc(
+        'confirmar_recebimento_devolucao',
+        {
+          p_devolucao_id: devolucaoId,
+        }
+      )
+
+      if (error) {
+        setErro(
+          'Não foi possível confirmar o recebimento. Confira se o pacote continua pendente e se seu perfil tem permissão.'
+        )
+        return
+      }
+
+      setSucesso('Recebimento confirmado com sucesso!')
+      await carregarDevolucoes()
+    } catch {
+      setErro('Ocorreu um erro ao confirmar o recebimento.')
+    } finally {
+      setRecebendoId(null)
+    }
+  }
 
   useEffect(() => {
     let ativo = true
@@ -90,7 +212,6 @@ function App() {
           setModo('redefinir')
         }
 
-        // Evita consultar o banco diretamente dentro do evento de autenticação.
         Promise.resolve().then(() => {
           if (ativo) carregarPerfil(sessao)
         })
@@ -129,38 +250,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuario, perfil])
 
-  async function carregarDevolucoes() {
-    const { data, error } = await supabase
-      .from('returns')
-      .select(
-        'id, codigo_rastreio, cidade_id, motivo, detalhes_motivo, status, criado_em'
-      )
-      .order('criado_em', { ascending: false })
-      .limit(200)
-
-    if (error) {
-      setErro('Não foi possível carregar as devoluções. Verifique as permissões do banco.')
-      return
-    }
-
-    setDevolucoes(data || [])
-  }
-
-  async function carregarPendentes() {
-    const { data, error } = await supabase.rpc(
-      'listar_cadastros_pendentes'
-    )
-
-    if (error) {
-      setErro(
-        'Não foi possível consultar os cadastros pendentes. Confirme as funções de aprovação no Supabase.'
-      )
-      return
-    }
-
-    setPendentes(data || [])
-  }
-
   function mudarModo(novoModo) {
     setErro('')
     setSucesso('')
@@ -181,7 +270,9 @@ function App() {
     setEnviando(false)
 
     if (error) {
-      setErro('Não foi possível entrar. Confira o e-mail, a senha e a confirmação do e-mail.')
+      setErro(
+        'Não foi possível entrar. Confira o e-mail, a senha e a confirmação do e-mail.'
+      )
     } else {
       setSenha('')
     }
@@ -219,8 +310,6 @@ function App() {
       return
     }
 
-    // Se o Supabase criar uma sessão automaticamente, encerra-a.
-    // O usuário precisa aguardar a aprovação para entrar na operação.
     if (data.session) {
       await supabase.auth.signOut()
     }
@@ -380,7 +469,9 @@ function App() {
     setCidadeId('')
     setMotivo('')
     setDetalhes('')
-    setSucesso('Devolução registrada! Aguarde a conferência física pela base.')
+    setSucesso(
+      'Devolução registrada! Aguarde a conferência física pela base.'
+    )
 
     await carregarDevolucoes()
   }
@@ -393,7 +484,6 @@ function App() {
     )
   }
 
-  // Tela de redefinição aberta pelo link enviado por e-mail.
   if (sessaoRecuperacao) {
     return (
       <main className="app">
@@ -440,7 +530,6 @@ function App() {
     )
   }
 
-  // Conta autenticada, mas ainda não aprovada.
   if (usuario && !perfil) {
     return (
       <main className="app">
@@ -655,11 +744,20 @@ function App() {
                 <span className="action-icon">
                   {item.status === 'recebido' ? '✓' : '…'}
                 </span>
+
                 <span className="action-text">
                   <strong>{item.codigo_rastreio}</strong>
+
+                  <small>
+                    Entregador:{' '}
+                    {nomesEntregadores[item.entregador_id] ||
+                      'Nome não identificado'}
+                  </small>
+
                   <small>
                     Cidade: {nomesCidades[item.cidade_id] || 'Não identificada'}
                   </small>
+
                   <small>Motivo: {item.motivo}</small>
 
                   {item.detalhes_motivo && (
@@ -672,9 +770,34 @@ function App() {
                       ? 'Recebido pela base'
                       : 'Aguardando recebimento'}
                   </small>
+
                   <small>
-                    Data: {new Date(item.criado_em).toLocaleString('pt-BR')}
+                    Registrado em:{' '}
+                    {new Date(item.criado_em).toLocaleString('pt-BR')}
                   </small>
+
+                  {item.status !== 'recebido' &&
+                    ['base', 'admin'].includes(perfil.perfil) && (
+                      <button
+                        className="login-button"
+                        type="button"
+                        disabled={recebendoId !== null}
+                        onClick={() => confirmarRecebimento(item.id)}
+                      >
+                        {recebendoId === item.id
+                          ? 'Confirmando...'
+                          : 'Confirmar recebimento'}
+                      </button>
+                    )}
+
+                  {item.status === 'recebido' && (
+                    <small>
+                      Recebido em:{' '}
+                      {item.recebido_em
+                        ? new Date(item.recebido_em).toLocaleString('pt-BR')
+                        : 'Data não informada'}
+                    </small>
+                  )}
                 </span>
               </article>
             ))
