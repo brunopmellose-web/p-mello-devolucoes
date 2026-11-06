@@ -1,5 +1,5 @@
-
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import { supabase } from './supabase'
 import './App.css'
 
@@ -12,6 +12,11 @@ const motivos = [
   'Outro',
 ]
 
+const formatarData = (data) => {
+  if (!data) return 'Não informado'
+  return new Date(data).toLocaleString('pt-BR')
+}
+
 function App() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
@@ -19,6 +24,7 @@ function App() {
   const [usuario, setUsuario] = useState(null)
   const [perfil, setPerfil] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  const [atualizando, setAtualizando] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
@@ -28,7 +34,6 @@ function App() {
   const [devolucoes, setDevolucoes] = useState([])
   const [pendentes, setPendentes] = useState([])
   const [perfisEscolhidos, setPerfisEscolhidos] = useState({})
-
   const [nomesEntregadores, setNomesEntregadores] = useState({})
   const [recebendoId, setRecebendoId] = useState(null)
 
@@ -38,6 +43,129 @@ function App() {
   const [detalhes, setDetalhes] = useState('')
   const [senhaNova, setSenhaNova] = useState('')
   const [sessaoRecuperacao, setSessaoRecuperacao] = useState(false)
+  const [paginaAtiva, setPaginaAtiva] = useState('inicio')
+
+  const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [filtroCidade, setFiltroCidade] = useState('todas')
+  const [filtroMotivo, setFiltroMotivo] = useState('todos')
+
+  // CONTROLE DA CÂMERA E DO LEITOR DE CÓDIGO
+  const [cameraAtiva, setCameraAtiva] = useState(false)
+  const videoRef = useRef(null)
+  const leitorRef = useRef(null)
+  const controlesCameraRef = useRef(null)
+
+  const pararCamera = useCallback(() => {
+    try {
+      controlesCameraRef.current?.stop()
+    } catch {
+      // Evita erro caso a câmera já esteja encerrada.
+    }
+
+    controlesCameraRef.current = null
+
+    const video = videoRef.current
+
+    if (video?.srcObject) {
+      video.srcObject.getTracks().forEach((track) => track.stop())
+      video.srcObject = null
+    }
+
+    setCameraAtiva(false)
+  }, [])
+
+  async function iniciarCamera() {
+    setErro('')
+    setSucesso('')
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErro('Seu navegador não permite acessar a câmera. Utilize o Chrome ou outro navegador atualizado.')
+      return
+    }
+
+    try {
+      setCameraAtiva(true)
+
+      // Aguarda o vídeo estar disponível na tela.
+      await new Promise((resolve) => setTimeout(resolve, 150))
+
+      if (!videoRef.current) {
+        setCameraAtiva(false)
+        setErro('Não foi possível iniciar a visualização da câmera.')
+        return
+      }
+
+      const leitor = new BrowserMultiFormatReader()
+      leitorRef.current = leitor
+
+      const dispositivos = await leitor.listVideoInputDevices()
+
+      if (!dispositivos || dispositivos.length === 0) {
+        setCameraAtiva(false)
+        setErro('Nenhuma câmera foi encontrada neste dispositivo.')
+        return
+      }
+
+      // Dá preferência à câmera traseira do celular.
+      const cameraTraseira = dispositivos.find((dispositivo) =>
+        /back|rear|environment|traseira|trás/i.test(dispositivo.label)
+      )
+
+      const cameraEscolhida = cameraTraseira || dispositivos[0]
+
+      const controles = await leitor.decodeFromVideoDevice(
+        cameraEscolhida.deviceId,
+        videoRef.current,
+        (resultado) => {
+          if (resultado) {
+            const codigoLido = resultado.getText().trim()
+
+            if (codigoLido) {
+              setCodigo(codigoLido)
+              setSucesso('Código lido com sucesso! Confira os dados antes de registrar.')
+              pararCamera()
+            }
+          }
+        }
+      )
+
+      controlesCameraRef.current = controles
+    } catch (erroCamera) {
+      pararCamera()
+
+      if (
+        erroCamera?.name === 'NotAllowedError' ||
+        erroCamera?.name === 'PermissionDeniedError'
+      ) {
+        setErro('Acesso à câmera negado. Autorize o uso da câmera nas configurações do navegador.')
+      } else if (erroCamera?.name === 'NotFoundError') {
+        setErro('Nenhuma câmera foi encontrada neste dispositivo.')
+      } else {
+        setErro('Não foi possível abrir a câmera. Verifique a permissão e tente novamente.')
+      }
+    }
+  }
+
+  // Encerra a câmera ao sair da tela de registro.
+  useEffect(() => {
+    if (paginaAtiva !== 'registrar' && cameraAtiva) {
+      pararCamera()
+    }
+  }, [paginaAtiva, cameraAtiva, pararCamera])
+
+  // Encerra a câmera ao fechar ou desmontar o aplicativo.
+  useEffect(() => {
+    return () => {
+      controlesCameraRef.current?.stop()
+
+      const video = videoRef.current
+
+      if (video?.srcObject) {
+        video.srcObject.getTracks().forEach((track) => track.stop())
+      }
+    }
+  }, [])
 
   const carregarPerfil = useCallback(async (sessao) => {
     if (!sessao) {
@@ -55,9 +183,7 @@ function App() {
     setUsuario(sessao.user)
 
     if (error) {
-      setErro(
-        'Não foi possível consultar seu perfil. Verifique as permissões do Supabase.'
-      )
+      setErro('Não foi possível consultar seu perfil. Verifique as permissões do Supabase.')
       setPerfil(null)
       return
     }
@@ -71,7 +197,7 @@ function App() {
     setPerfil(data)
   }, [])
 
-  async function carregarDevolucoes() {
+  const carregarDevolucoes = useCallback(async () => {
     const { data, error } = await supabase
       .from('returns')
       .select(`
@@ -90,9 +216,7 @@ function App() {
       .limit(200)
 
     if (error) {
-      setErro(
-        'Não foi possível carregar as devoluções. Verifique as permissões do banco.'
-      )
+      setErro('Não foi possível carregar as devoluções. Verifique as permissões do banco.')
       return
     }
 
@@ -100,11 +224,7 @@ function App() {
     setDevolucoes(lista)
 
     const idsEntregadores = [
-      ...new Set(
-        lista
-          .map((item) => item.entregador_id)
-          .filter(Boolean)
-      ),
+      ...new Set(lista.map((item) => item.entregador_id).filter(Boolean)),
     ]
 
     if (idsEntregadores.length === 0) {
@@ -112,44 +232,47 @@ function App() {
       return
     }
 
-    const { data: perfisEntregadores, error: erroPerfis } =
-      await supabase
-        .from('profiles')
-        .select('id, nome')
-        .in('id', idsEntregadores)
+    const { data: perfisEntregadores, error: erroPerfis } = await supabase
+      .from('profiles')
+      .select('id, nome')
+      .in('id', idsEntregadores)
 
     if (erroPerfis) {
       setNomesEntregadores({})
-      setErro(
-        'As devoluções foram carregadas, mas não foi possível consultar os nomes dos entregadores. Confira as permissões de leitura dos perfis no Supabase.'
-      )
+      setErro('As devoluções foram carregadas, mas não foi possível consultar os nomes dos entregadores. Confira as permissões de leitura dos perfis.')
       return
     }
 
-    const mapaNomes = Object.fromEntries(
-      (perfisEntregadores || []).map((item) => [
-        item.id,
-        item.nome,
-      ])
+    setNomesEntregadores(
+      Object.fromEntries(
+        (perfisEntregadores || []).map((item) => [item.id, item.nome])
+      )
     )
+  }, [])
 
-    setNomesEntregadores(mapaNomes)
-  }
-
-  async function carregarPendentes() {
-    const { data, error } = await supabase.rpc(
-      'listar_cadastros_pendentes'
-    )
+  const carregarPendentes = useCallback(async () => {
+    const { data, error } = await supabase.rpc('listar_cadastros_pendentes')
 
     if (error) {
-      setErro(
-        'Não foi possível consultar os cadastros pendentes. Confirme as funções de aprovação no Supabase.'
-      )
+      setErro('Não foi possível consultar os cadastros pendentes. Confirme as funções de aprovação no Supabase.')
       return
     }
 
     setPendentes(data || [])
-  }
+  }, [])
+
+  const atualizarDados = useCallback(async () => {
+    setAtualizando(true)
+    setErro('')
+
+    await carregarDevolucoes()
+
+    if (perfil?.perfil === 'admin') {
+      await carregarPendentes()
+    }
+
+    setAtualizando(false)
+  }, [carregarDevolucoes, carregarPendentes, perfil])
 
   async function confirmarRecebimento(devolucaoId) {
     const confirmar = window.confirm(
@@ -165,15 +288,11 @@ function App() {
     try {
       const { error } = await supabase.rpc(
         'confirmar_recebimento_devolucao',
-        {
-          p_devolucao_id: devolucaoId,
-        }
+        { p_devolucao_id: devolucaoId }
       )
 
       if (error) {
-        setErro(
-          'Não foi possível confirmar o recebimento. Confira se o pacote continua pendente e se seu perfil tem permissão.'
-        )
+        setErro('Não foi possível confirmar o recebimento. Confira se o pacote continua pendente e se seu perfil tem permissão.')
         return
       }
 
@@ -247,8 +366,7 @@ function App() {
     }
 
     carregarDados()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuario, perfil])
+  }, [usuario, perfil, carregarDevolucoes, carregarPendentes])
 
   function mudarModo(novoModo) {
     setErro('')
@@ -270,9 +388,7 @@ function App() {
     setEnviando(false)
 
     if (error) {
-      setErro(
-        'Não foi possível entrar. Confira o e-mail, a senha e a confirmação do e-mail.'
-      )
+      setErro('Não foi possível entrar. Confira o e-mail, a senha e a confirmação do e-mail.')
     } else {
       setSenha('')
     }
@@ -317,9 +433,7 @@ function App() {
     setSenha('')
     setNome('')
     setModo('login')
-    setSucesso(
-      'Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação do administrador.'
-    )
+    setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação do administrador.')
   }
 
   async function recuperarSenha(evento) {
@@ -336,9 +450,7 @@ function App() {
 
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.trim(),
-      {
-        redirectTo: window.location.origin,
-      }
+      { redirectTo: window.location.origin }
     )
 
     setEnviando(false)
@@ -352,9 +464,7 @@ function App() {
       return
     }
 
-    setSucesso(
-      'Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha. Confira também o spam.'
-    )
+    setSucesso('Se o e-mail estiver cadastrado, você receberá um link de redefinição. Confira também o spam.')
   }
 
   async function atualizarSenha(evento) {
@@ -376,9 +486,7 @@ function App() {
     setEnviando(false)
 
     if (error) {
-      setErro(
-        'Não foi possível atualizar a senha. Solicite um novo link de recuperação.'
-      )
+      setErro('Não foi possível atualizar a senha. Solicite um novo link de recuperação.')
       return
     }
 
@@ -391,6 +499,8 @@ function App() {
   }
 
   async function sair() {
+    pararCamera()
+
     const { error } = await supabase.auth.signOut()
 
     if (error) {
@@ -399,6 +509,7 @@ function App() {
       setPerfil(null)
       setUsuario(null)
       setModo('login')
+      setPaginaAtiva('inicio')
       setErro('')
       setSucesso('')
     }
@@ -419,9 +530,7 @@ function App() {
     setEnviando(false)
 
     if (error) {
-      setErro(
-        'Não foi possível aprovar o cadastro. Confirme se sua conta é um administrador ativo.'
-      )
+      setErro('Não foi possível aprovar o cadastro. Confirme se sua conta é um administrador ativo.')
       return
     }
 
@@ -469,12 +578,82 @@ function App() {
     setCidadeId('')
     setMotivo('')
     setDetalhes('')
-    setSucesso(
-      'Devolução registrada! Aguarde a conferência física pela base.'
-    )
+    setSucesso('Devolução registrada! Aguarde a conferência física pela base.')
 
     await carregarDevolucoes()
   }
+
+  const nomesCidades = useMemo(
+    () => Object.fromEntries(cidades.map((cidade) => [cidade.id, cidade.nome])),
+    [cidades]
+  )
+
+  const totalDevolucoes = devolucoes.length
+
+  const aguardandoRecebimento = devolucoes.filter(
+    (item) => item.status !== 'recebido'
+  ).length
+
+  const recebidas = devolucoes.filter(
+    (item) => item.status === 'recebido'
+  ).length
+
+  const devolucoesFiltradas = useMemo(() => {
+    return devolucoes.filter((item) => {
+      const termo = busca.trim().toLowerCase()
+
+      const correspondeBusca =
+        !termo ||
+        item.codigo_rastreio?.toLowerCase().includes(termo) ||
+        nomesEntregadores[item.entregador_id]?.toLowerCase().includes(termo)
+
+      const correspondeStatus =
+        filtroStatus === 'todos' ||
+        (filtroStatus === 'pendente' && item.status !== 'recebido') ||
+        (filtroStatus === 'recebido' && item.status === 'recebido')
+
+      const correspondeCidade =
+        filtroCidade === 'todas' || item.cidade_id === filtroCidade
+
+      const correspondeMotivo =
+        filtroMotivo === 'todos' || item.motivo === filtroMotivo
+
+      return (
+        correspondeBusca &&
+        correspondeStatus &&
+        correspondeCidade &&
+        correspondeMotivo
+      )
+    })
+  }, [
+    devolucoes,
+    busca,
+    filtroStatus,
+    filtroCidade,
+    filtroMotivo,
+    nomesEntregadores,
+  ])
+
+  const dadosPorCidade = useMemo(() => {
+    const contagem = {}
+
+    devolucoes.forEach((item) => {
+      const cidade = nomesCidades[item.cidade_id] || 'Não identificada'
+      contagem[cidade] = (contagem[cidade] || 0) + 1
+    })
+
+    return Object.entries(contagem).sort((a, b) => b[1] - a[1])
+  }, [devolucoes, nomesCidades])
+
+  const dadosPorMotivo = useMemo(() => {
+    const contagem = {}
+
+    devolucoes.forEach((item) => {
+      contagem[item.motivo] = (contagem[item.motivo] || 0) + 1
+    })
+
+    return Object.entries(contagem).sort((a, b) => b[1] - a[1])
+  }, [devolucoes])
 
   if (carregando) {
     return (
@@ -573,248 +752,710 @@ function App() {
           ? 'Equipe da base'
           : 'Entregador'
 
-    const nomesCidades = Object.fromEntries(
-      cidades.map((cidade) => [cidade.id, cidade.nome])
+    const podeRegistrar = perfil.perfil === 'entregador'
+    const podeConferir = ['base', 'admin'].includes(perfil.perfil)
+    const ehAdmin = perfil.perfil === 'admin'
+
+    const menu = [
+      { id: 'inicio', titulo: 'Visão geral', icone: '⌂' },
+      ...(podeRegistrar
+        ? [{ id: 'registrar', titulo: 'Registrar devolução', icone: '+' }]
+        : []),
+      ...(podeConferir
+        ? [{ id: 'central', titulo: 'Central de devoluções', icone: '▤' }]
+        : []),
+      { id: 'historico', titulo: 'Histórico de devoluções', icone: '◷' },
+      ...(ehAdmin
+        ? [
+            { id: 'relatorios', titulo: 'Relatórios e indicadores', icone: '▥' },
+            { id: 'configuracoes', titulo: 'Configurações', icone: '⚙' },
+          ]
+        : []),
+    ]
+
+    const paginaPermitida = menu.some((item) => item.id === paginaAtiva)
+    const paginaAtual = paginaPermitida ? paginaAtiva : 'inicio'
+
+    const tituloPagina =
+      menu.find((item) => item.id === paginaAtual)?.titulo || 'Visão geral'
+
+    const listaHistorico = devolucoesFiltradas.filter((item) =>
+      paginaAtual === 'central' ? item.status !== 'recebido' : true
+    )
+
+    const maiorVolumeCidade = Math.max(
+      1,
+      ...dadosPorCidade.map((item) => item[1])
+    )
+
+    const maiorVolumeMotivo = Math.max(
+      1,
+      ...dadosPorMotivo.map((item) => item[1])
     )
 
     return (
-      <main className="app">
-        <header className="topbar">
-          <div className="brand">
+      <main className="dashboard">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
             <div className="brand-mark">PM</div>
             <div>
               <h1>P. MELLO</h1>
               <span>TRANSPORTES</span>
             </div>
           </div>
-          <button className="logout" onClick={sair}>Sair</button>
-        </header>
 
-        <section className="welcome">
-          <span className="eyebrow">CONTROLE DE DEVOLUÇÕES</span>
-          <h2>Olá, {perfil.nome}!</h2>
-          <p>Acesso: {nomePerfil}</p>
-        </section>
+          <div className="sidebar-user">
+            <div className="user-avatar">
+              {(perfil.nome || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <strong>{perfil.nome}</strong>
+              <small>{nomePerfil}</small>
+            </div>
+          </div>
 
-        {perfil.perfil === 'admin' && (
-          <section className="login-panel">
-            <h3>Solicitações de acesso</h3>
-            <p className="notice">
-              Aprove os cadastros e escolha o perfil autorizado. Esta tela
-              não permite criar novos administradores.
-            </p>
+          <nav className="sidebar-nav" aria-label="Navegação principal">
+            <span className="nav-caption">MENU PRINCIPAL</span>
 
-            {pendentes.length === 0 ? (
-              <p className="notice">Nenhum cadastro pendente.</p>
-            ) : (
-              pendentes.map((item) => (
-                <article className="action-card" key={item.id}>
-                  <span className="action-icon">?</span>
-                  <span className="action-text">
-                    <strong>{item.nome}</strong>
-                    <small>{item.email}</small>
-                    <small>
-                      Solicitado em:{' '}
-                      {new Date(item.criado_em).toLocaleString('pt-BR')}
-                    </small>
+            {menu.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`menu-button ${paginaAtual === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  pararCamera()
+                  setPaginaAtiva(item.id)
+                  setErro('')
+                  setSucesso('')
+                }}
+              >
+                <span className="menu-icon">{item.icone}</span>
+                {item.titulo}
+              </button>
+            ))}
+          </nav>
 
-                    <label htmlFor={`perfil-${item.id}`}>
-                      Perfil para liberar
-                    </label>
-                    <select
-                      id={`perfil-${item.id}`}
-                      value={perfisEscolhidos[item.id] || 'entregador'}
-                      onChange={(e) =>
-                        setPerfisEscolhidos((anterior) => ({
-                          ...anterior,
-                          [item.id]: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="entregador">Entregador</option>
-                      <option value="base">Equipe da base</option>
-                    </select>
+          <div className="sidebar-bottom">
+            <div className="sidebar-status">
+              <span className="status-dot" />
+              Sistema operacional
+            </div>
+            <button className="sidebar-logout" onClick={sair} type="button">
+              Sair da conta
+            </button>
+          </div>
+        </aside>
 
+        <section className="dashboard-main">
+          <header className="dashboard-topbar">
+            <div>
+              <span className="eyebrow">P. MELLO TRANSPORTES</span>
+              <h2>{tituloPagina}</h2>
+            </div>
+            <div className="topbar-user">
+              <span>{perfil.nome}</span>
+              <div className="user-avatar small">
+                {(perfil.nome || 'U').charAt(0).toUpperCase()}
+              </div>
+            </div>
+          </header>
+
+          <div className="dashboard-content">
+            {erro && <p className="error-message">{erro}</p>}
+            {sucesso && <p className="success-message">{sucesso}</p>}
+
+            {paginaAtual === 'inicio' && (
+              <>
+                <section className="dashboard-heading">
+                  <div>
+                    <span className="eyebrow">
+                      {ehAdmin ? 'PAINEL DE GESTÃO' : podeConferir ? 'PAINEL DA BASE' : 'PAINEL DO ENTREGADOR'}
+                    </span>
+                    <h3>Olá, {perfil.nome}!</h3>
+                    <p>
+                      {ehAdmin
+                        ? 'Acompanhe os indicadores e a movimentação geral das devoluções.'
+                        : podeConferir
+                          ? 'Acompanhe os pacotes que aguardam conferência física.'
+                          : 'Acompanhe suas devoluções registradas e seus respectivos status.'}
+                    </p>
+                  </div>
+
+                  <button
+                    className="refresh-button"
+                    type="button"
+                    disabled={atualizando}
+                    onClick={atualizarDados}
+                  >
+                    {atualizando ? 'Atualizando...' : '↻ Atualizar dados'}
+                  </button>
+                </section>
+
+                <section className="dashboard-cards">
+                  <article className="metric-card">
+                    <span className="metric-label">Total de devoluções</span>
+                    <strong>{totalDevolucoes}</strong>
+                    <small>Registros disponíveis no seu perfil</small>
+                  </article>
+
+                  <article className="metric-card warning">
+                    <span className="metric-label">Aguardando recebimento</span>
+                    <strong>{aguardandoRecebimento}</strong>
+                    <small>Pendentes de conferência pela base</small>
+                  </article>
+
+                  <article className="metric-card success">
+                    <span className="metric-label">Recebidas pela base</span>
+                    <strong>{recebidas}</strong>
+                    <small>Recebimento físico confirmado</small>
+                  </article>
+
+                  {ehAdmin && (
+                    <article className="metric-card">
+                      <span className="metric-label">Cadastros pendentes</span>
+                      <strong>{pendentes.length}</strong>
+                      <small>Aguardando aprovação de acesso</small>
+                    </article>
+                  )}
+                </section>
+
+                {ehAdmin && (
+                  <section className="content-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Distribuição por cidade</h3>
+                        <p>Volume de devoluções nos registros disponíveis.</p>
+                      </div>
+                    </div>
+
+                    {dadosPorCidade.length === 0 ? (
+                      <p className="notice">Ainda não existem dados para apresentar.</p>
+                    ) : (
+                      <div className="report-bars">
+                        {dadosPorCidade.map(([cidade, quantidade]) => (
+                          <div className="report-bar-row" key={cidade}>
+                            <div className="report-bar-info">
+                              <span>{cidade}</span>
+                              <strong>{quantidade}</strong>
+                            </div>
+                            <div className="report-bar-track">
+                              <div
+                                className="report-bar-fill"
+                                style={{
+                                  width: `${(quantidade / maiorVolumeCidade) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                <section className="content-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h3>Movimentações recentes</h3>
+                      <p>Últimas devoluções registradas no sistema.</p>
+                    </div>
                     <button
-                      className="login-button"
-                      disabled={enviando}
-                      onClick={() => aprovarUsuario(item.id)}
+                      className="text-button"
+                      type="button"
+                      onClick={() => setPaginaAtiva('historico')}
                     >
-                      {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                      Ver histórico
                     </button>
-                  </span>
-                </article>
-              ))
+                  </div>
+
+                  {devolucoes.length === 0 ? (
+                    <p className="notice">Nenhuma devolução encontrada até o momento.</p>
+                  ) : (
+                    devolucoes.slice(0, 5).map((item) => (
+                      <article className="return-row" key={item.id}>
+                        <div className="return-main">
+                          <strong>{item.codigo_rastreio}</strong>
+                          <span>
+                            {nomesCidades[item.cidade_id] || 'Cidade não identificada'}
+                            {' · '}
+                            {item.motivo}
+                          </span>
+                        </div>
+                        <span className={`return-status ${item.status === 'recebido' ? 'received' : 'pending'}`}>
+                          {item.status === 'recebido' ? 'Recebido' : 'Pendente'}
+                        </span>
+                      </article>
+                    ))
+                  )}
+                </section>
+
+                {ehAdmin && (
+                  <section className="content-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Solicitações de acesso</h3>
+                        <p>Cadastros que aguardam aprovação do administrador.</p>
+                      </div>
+                      <span className="count-pill">{pendentes.length} pendente(s)</span>
+                    </div>
+
+                    {pendentes.length === 0 ? (
+                      <p className="notice">Nenhum cadastro pendente.</p>
+                    ) : (
+                      pendentes.map((item) => (
+                        <article className="action-card" key={item.id}>
+                          <span className="action-icon">?</span>
+                          <span className="action-text">
+                            <strong>{item.nome}</strong>
+                            <small>{item.email}</small>
+                            <small>Solicitado em: {formatarData(item.criado_em)}</small>
+                            <label htmlFor={`perfil-${item.id}`}>Perfil para liberar</label>
+                            <select
+                              id={`perfil-${item.id}`}
+                              value={perfisEscolhidos[item.id] || 'entregador'}
+                              onChange={(e) =>
+                                setPerfisEscolhidos((anterior) => ({
+                                  ...anterior,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="entregador">Entregador</option>
+                              <option value="base">Equipe da base</option>
+                            </select>
+                            <button
+                              className="login-button"
+                              disabled={enviando}
+                              onClick={() => aprovarUsuario(item.id)}
+                              type="button"
+                            >
+                              {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                            </button>
+                          </span>
+                        </article>
+                      ))
+                    )}
+                  </section>
+                )}
+              </>
             )}
 
-            <button className="logout" onClick={carregarPendentes}>
-              Atualizar solicitações
-            </button>
-          </section>
-        )}
+            {paginaAtual === 'registrar' && podeRegistrar && (
+              <section className="content-panel form-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h3>Registrar devolução</h3>
+                    <p>Informe os dados do pacote para registrar a devolução.</p>
+                  </div>
+                </div>
 
-        {perfil.perfil === 'entregador' && (
-          <section className="login-panel">
-            <h3>Registrar devolução</h3>
+                <form onSubmit={registrarDevolucao}>
+                  <label htmlFor="codigo">Código de rastreio</label>
 
-            <form onSubmit={registrarDevolucao}>
-              <label htmlFor="codigo">Código de rastreio</label>
-              <input
-                id="codigo"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                placeholder="Digite ou escaneie o código"
-                required
-              />
-
-              <label htmlFor="cidade">Cidade</label>
-              <select
-                id="cidade"
-                value={cidadeId}
-                onChange={(e) => setCidadeId(e.target.value)}
-                required
-              >
-                <option value="">Selecione a cidade</option>
-                {cidades.map((cidade) => (
-                  <option key={cidade.id} value={cidade.id}>
-                    {cidade.nome}
-                  </option>
-                ))}
-              </select>
-
-              <label htmlFor="motivo">Motivo da devolução</label>
-              <select
-                id="motivo"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                required
-              >
-                <option value="">Selecione o motivo</option>
-                {motivos.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-
-              {motivo === 'Outro' && (
-                <>
-                  <label htmlFor="detalhes">Descreva o motivo</label>
-                  <textarea
-                    id="detalhes"
-                    value={detalhes}
-                    onChange={(e) => setDetalhes(e.target.value)}
-                    placeholder="Explique o motivo da devolução"
+                  <input
+                    id="codigo"
+                    value={codigo}
+                    onChange={(e) => setCodigo(e.target.value)}
+                    placeholder="Digite ou escaneie o código"
+                    autoComplete="off"
                     required
                   />
-                </>
-              )}
 
-              {erro && <p className="error-message">{erro}</p>}
-              {sucesso && <p className="success-message">{sucesso}</p>}
+                  <button
+                    type="button"
+                    className="refresh-button"
+                    onClick={cameraAtiva ? pararCamera : iniciarCamera}
+                    style={{
+                      width: '100%',
+                      marginTop: '10px',
+                      marginBottom: '15px',
+                    }}
+                  >
+                    {cameraAtiva ? '✕ Fechar câmera' : '▣ Ler código pela câmera'}
+                  </button>
 
-              <button
-                className="login-button"
-                type="submit"
-                disabled={enviando}
-              >
-                {enviando ? 'Registrando...' : 'Registrar devolução'}
-              </button>
-            </form>
-          </section>
-        )}
+                  <div
+                    style={{
+                      display: cameraAtiva ? 'block' : 'none',
+                      width: '100%',
+                      marginBottom: '18px',
+                      background: '#000',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <video
+                      ref={videoRef}
+                      muted
+                      playsInline
+                      autoPlay
+                      style={{
+                        width: '100%',
+                        maxHeight: '320px',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                    <p
+                      style={{
+                        color: '#ffd400',
+                        textAlign: 'center',
+                        padding: '10px',
+                        margin: 0,
+                        fontSize: '13px',
+                      }}
+                    >
+                      Aponte a câmera para o código de barras ou QR Code do pacote.
+                    </p>
+                  </div>
 
-        <section className="actions">
-          <h3>
-            {perfil.perfil === 'base'
-              ? 'Devoluções para conferência'
-              : 'Histórico de devoluções'}
-          </h3>
+                  <label htmlFor="cidade">Cidade</label>
+                  <select
+                    id="cidade"
+                    value={cidadeId}
+                    onChange={(e) => setCidadeId(e.target.value)}
+                    required
+                  >
+                    <option value="">Selecione a cidade</option>
+                    {cidades.map((cidade) => (
+                      <option key={cidade.id} value={cidade.id}>
+                        {cidade.nome}
+                      </option>
+                    ))}
+                  </select>
 
-          <p className="notice">
-            {devolucoes.length} registro(s) disponível(is) conforme as
-            permissões do seu perfil.
-          </p>
+                  <label htmlFor="motivo">Motivo da devolução</label>
+                  <select
+                    id="motivo"
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    required
+                  >
+                    <option value="">Selecione o motivo</option>
+                    {motivos.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
 
-          {devolucoes.length === 0 ? (
-            <p className="notice">
-              Nenhuma devolução encontrada até o momento.
-            </p>
-          ) : (
-            devolucoes.map((item) => (
-              <article className="action-card" key={item.id}>
-                <span className="action-icon">
-                  {item.status === 'recebido' ? '✓' : '…'}
-                </span>
-
-                <span className="action-text">
-                  <strong>{item.codigo_rastreio}</strong>
-
-                  <small>
-                    Entregador:{' '}
-                    {nomesEntregadores[item.entregador_id] ||
-                      'Nome não identificado'}
-                  </small>
-
-                  <small>
-                    Cidade: {nomesCidades[item.cidade_id] || 'Não identificada'}
-                  </small>
-
-                  <small>Motivo: {item.motivo}</small>
-
-                  {item.detalhes_motivo && (
-                    <small>Detalhes: {item.detalhes_motivo}</small>
+                  {motivo === 'Outro' && (
+                    <>
+                      <label htmlFor="detalhes">Descreva o motivo</label>
+                      <textarea
+                        id="detalhes"
+                        value={detalhes}
+                        onChange={(e) => setDetalhes(e.target.value)}
+                        placeholder="Explique o motivo da devolução"
+                        required
+                      />
+                    </>
                   )}
 
-                  <small>
-                    Status:{' '}
-                    {item.status === 'recebido'
-                      ? 'Recebido pela base'
-                      : 'Aguardando recebimento'}
-                  </small>
+                  <button className="login-button" type="submit" disabled={enviando}>
+                    {enviando ? 'Registrando...' : 'Registrar devolução'}
+                  </button>
+                </form>
+              </section>
+            )}
 
-                  <small>
-                    Registrado em:{' '}
-                    {new Date(item.criado_em).toLocaleString('pt-BR')}
-                  </small>
+            {(paginaAtual === 'central' || paginaAtual === 'historico') && (
+              <section className="content-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h3>
+                      {paginaAtual === 'central'
+                        ? 'Devoluções aguardando conferência'
+                        : 'Histórico de devoluções'}
+                    </h3>
+                    <p>{listaHistorico.length} registro(s) encontrado(s).</p>
+                  </div>
 
-                  {item.status !== 'recebido' &&
-                    ['base', 'admin'].includes(perfil.perfil) && (
-                      <button
-                        className="login-button"
-                        type="button"
-                        disabled={recebendoId !== null}
-                        onClick={() => confirmarRecebimento(item.id)}
-                      >
-                        {recebendoId === item.id
-                          ? 'Confirmando...'
-                          : 'Confirmar recebimento'}
-                      </button>
-                    )}
+                  <button
+                    className="refresh-button"
+                    type="button"
+                    disabled={atualizando}
+                    onClick={atualizarDados}
+                  >
+                    {atualizando ? 'Atualizando...' : '↻ Atualizar'}
+                  </button>
+                </div>
 
-                  {item.status === 'recebido' && (
-                    <small>
-                      Recebido em:{' '}
-                      {item.recebido_em
-                        ? new Date(item.recebido_em).toLocaleString('pt-BR')
-                        : 'Data não informada'}
-                    </small>
+                <div className="history-filters">
+                  <input
+                    type="search"
+                    placeholder="Pesquisar código ou entregador..."
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                  />
+
+                  <select
+                    value={filtroStatus}
+                    onChange={(e) => setFiltroStatus(e.target.value)}
+                  >
+                    <option value="todos">Todos os status</option>
+                    <option value="pendente">Aguardando recebimento</option>
+                    <option value="recebido">Recebidos</option>
+                  </select>
+
+                  <select
+                    value={filtroCidade}
+                    onChange={(e) => setFiltroCidade(e.target.value)}
+                  >
+                    <option value="todas">Todas as cidades</option>
+                    {cidades.map((cidade) => (
+                      <option key={cidade.id} value={cidade.id}>{cidade.nome}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filtroMotivo}
+                    onChange={(e) => setFiltroMotivo(e.target.value)}
+                  >
+                    <option value="todos">Todos os motivos</option>
+                    {motivos.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {listaHistorico.length === 0 ? (
+                  <p className="notice">Nenhuma devolução encontrada com os filtros selecionados.</p>
+                ) : (
+                  listaHistorico.map((item) => (
+                    <article className="return-detail-card" key={item.id}>
+                      <div className="return-detail-heading">
+                        <strong>{item.codigo_rastreio}</strong>
+                        <span className={`return-status ${item.status === 'recebido' ? 'received' : 'pending'}`}>
+                          {item.status === 'recebido' ? 'Recebido pela base' : 'Aguardando recebimento'}
+                        </span>
+                      </div>
+
+                      <div className="return-detail-grid">
+                        <span>
+                          <small>Entregador</small>
+                          {nomesEntregadores[item.entregador_id] || 'Nome não identificado'}
+                        </span>
+                        <span>
+                          <small>Cidade</small>
+                          {nomesCidades[item.cidade_id] || 'Não identificada'}
+                        </span>
+                        <span>
+                          <small>Motivo</small>
+                          {item.motivo}
+                        </span>
+                        <span>
+                          <small>Registrado em</small>
+                          {formatarData(item.criado_em)}
+                        </span>
+                      </div>
+
+                      {item.detalhes_motivo && (
+                        <p className="notice">Detalhes: {item.detalhes_motivo}</p>
+                      )}
+
+                      {item.status !== 'recebido' && podeConferir && (
+                        <button
+                          className="login-button"
+                          type="button"
+                          disabled={recebendoId !== null}
+                          onClick={() => confirmarRecebimento(item.id)}
+                        >
+                          {recebendoId === item.id ? 'Confirmando...' : 'Confirmar recebimento físico'}
+                        </button>
+                      )}
+
+                      {item.status === 'recebido' && (
+                        <small className="received-date">
+                          Recebido em: {formatarData(item.recebido_em)}
+                        </small>
+                      )}
+                    </article>
+                  ))
+                )}
+              </section>
+            )}
+
+            {paginaAtual === 'relatorios' && ehAdmin && (
+              <>
+                <section className="dashboard-heading">
+                  <div>
+                    <span className="eyebrow">ACOMPANHAMENTO</span>
+                    <h3>Relatórios e indicadores</h3>
+                    <p>Análise dos registros disponíveis no sistema.</p>
+                  </div>
+
+                  <button
+                    className="refresh-button"
+                    type="button"
+                    disabled={atualizando}
+                    onClick={atualizarDados}
+                  >
+                    {atualizando ? 'Atualizando...' : '↻ Atualizar dados'}
+                  </button>
+                </section>
+
+                <section className="dashboard-cards">
+                  <article className="metric-card">
+                    <span className="metric-label">Registros no histórico</span>
+                    <strong>{totalDevolucoes}</strong>
+                    <small>Até 200 registros mais recentes</small>
+                  </article>
+                  <article className="metric-card warning">
+                    <span className="metric-label">Pendentes</span>
+                    <strong>{aguardandoRecebimento}</strong>
+                    <small>Aguardando confirmação da base</small>
+                  </article>
+                  <article className="metric-card success">
+                    <span className="metric-label">Concluídas</span>
+                    <strong>{recebidas}</strong>
+                    <small>Recebimento confirmado</small>
+                  </article>
+                </section>
+
+                <section className="content-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h3>Devoluções por cidade</h3>
+                      <p>Distribuição dos registros por localidade.</p>
+                    </div>
+                  </div>
+
+                  {dadosPorCidade.length === 0 ? (
+                    <p className="notice">Sem dados disponíveis.</p>
+                  ) : (
+                    <div className="report-bars">
+                      {dadosPorCidade.map(([cidade, quantidade]) => (
+                        <div className="report-bar-row" key={cidade}>
+                          <div className="report-bar-info">
+                            <span>{cidade}</span>
+                            <strong>{quantidade}</strong>
+                          </div>
+                          <div className="report-bar-track">
+                            <div
+                              className="report-bar-fill"
+                              style={{ width: `${(quantidade / maiorVolumeCidade) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </span>
-              </article>
-            ))
-          )}
+                </section>
 
-          <button className="logout" onClick={carregarDevolucoes}>
-            Atualizar histórico
-          </button>
+                <section className="content-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h3>Devoluções por motivo</h3>
+                      <p>Principais motivos registrados pela equipe.</p>
+                    </div>
+                  </div>
+
+                  {dadosPorMotivo.length === 0 ? (
+                    <p className="notice">Sem dados disponíveis.</p>
+                  ) : (
+                    <div className="report-bars">
+                      {dadosPorMotivo.map(([nomeMotivo, quantidade]) => (
+                        <div className="report-bar-row" key={nomeMotivo}>
+                          <div className="report-bar-info">
+                            <span>{nomeMotivo}</span>
+                            <strong>{quantidade}</strong>
+                          </div>
+                          <div className="report-bar-track">
+                            <div
+                              className="report-bar-fill"
+                              style={{ width: `${(quantidade / maiorVolumeMotivo) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="content-panel">
+                  <h3>Limite dos indicadores</h3>
+                  <p className="notice">
+                    Os relatórios são calculados com base nos registros que o sistema
+                    disponibiliza para seu perfil, limitados aos 200 registros mais
+                    recentes. Eles não representam volume total da operação fora do aplicativo.
+                  </p>
+                </section>
+              </>
+            )}
+
+            {paginaAtual === 'configuracoes' && ehAdmin && (
+              <>
+                <section className="content-panel">
+                  <h3>Configurações da conta</h3>
+                  <div className="settings-row">
+                    <span><small>Nome</small>{perfil.nome}</span>
+                    <span><small>E-mail</small>{usuario.email}</span>
+                    <span><small>Perfil de acesso</small>{nomePerfil}</span>
+                  </div>
+                </section>
+
+                <section className="content-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h3>Solicitações de acesso</h3>
+                      <p>Gerencie os novos cadastros da equipe.</p>
+                    </div>
+                    <button
+                      className="refresh-button"
+                      type="button"
+                      onClick={carregarPendentes}
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+
+                  {pendentes.length === 0 ? (
+                    <p className="notice">Nenhum cadastro pendente.</p>
+                  ) : (
+                    pendentes.map((item) => (
+                      <article className="action-card" key={item.id}>
+                        <span className="action-icon">?</span>
+                        <span className="action-text">
+                          <strong>{item.nome}</strong>
+                          <small>{item.email}</small>
+                          <small>Solicitado em: {formatarData(item.criado_em)}</small>
+
+                          <label htmlFor={`perfil-config-${item.id}`}>Perfil para liberar</label>
+                          <select
+                            id={`perfil-config-${item.id}`}
+                            value={perfisEscolhidos[item.id] || 'entregador'}
+                            onChange={(e) =>
+                              setPerfisEscolhidos((anterior) => ({
+                                ...anterior,
+                                [item.id]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="entregador">Entregador</option>
+                            <option value="base">Equipe da base</option>
+                          </select>
+
+                          <button
+                            className="login-button"
+                            disabled={enviando}
+                            onClick={() => aprovarUsuario(item.id)}
+                            type="button"
+                          >
+                            {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                          </button>
+                        </span>
+                      </article>
+                    ))
+                  )}
+                </section>
+              </>
+            )}
+
+            <footer className="dashboard-footer">
+              <span>P. MELLO TRANSPORTES</span>
+              <span>CONTROLE • RASTREABILIDADE • RESULTADO</span>
+            </footer>
+          </div>
         </section>
-
-        {erro && <p className="error-message">{erro}</p>}
-        {sucesso && <p className="success-message">{sucesso}</p>}
-
-        <footer>
-          <span>P. MELLO TRANSPORTES</span>
-          <span>CONTROLE • RASTREABILIDADE • RESULTADO</span>
-        </footer>
       </main>
     )
   }
@@ -891,19 +1532,12 @@ function App() {
               {erro && <p className="error-message">{erro}</p>}
               {sucesso && <p className="success-message">{sucesso}</p>}
 
-              <button
-                className="login-button"
-                type="submit"
-                disabled={enviando}
-              >
+              <button className="login-button" type="submit" disabled={enviando}>
                 {enviando ? 'Entrando...' : 'Entrar'}
               </button>
             </form>
 
-            <p className="notice" style={{
-              textAlign: 'center',
-              marginTop: '22px',
-            }}>
+            <p className="notice" style={{ textAlign: 'center', marginTop: '22px' }}>
               Ainda não tem acesso?
             </p>
 
@@ -962,11 +1596,7 @@ function App() {
               {erro && <p className="error-message">{erro}</p>}
               {sucesso && <p className="success-message">{sucesso}</p>}
 
-              <button
-                className="login-button"
-                type="submit"
-                disabled={enviando}
-              >
+              <button className="login-button" type="submit" disabled={enviando}>
                 {enviando ? 'Enviando solicitação...' : 'Solicitar cadastro'}
               </button>
             </form>
@@ -1004,11 +1634,7 @@ function App() {
               {erro && <p className="error-message">{erro}</p>}
               {sucesso && <p className="success-message">{sucesso}</p>}
 
-              <button
-                className="login-button"
-                type="submit"
-                disabled={enviando}
-              >
+              <button className="login-button" type="submit" disabled={enviando}>
                 {enviando ? 'Enviando...' : 'Enviar link de recuperação'}
               </button>
             </form>
