@@ -33,10 +33,16 @@ function App() {
   const [cidades, setCidades] = useState([])
   const [devolucoes, setDevolucoes] = useState([])
   const [pendentes, setPendentes] = useState([])
+  const [usuarios, setUsuarios] = useState([])
+  const [buscaUsuario, setBuscaUsuario] = useState('')
+  const [filtroPerfilUsuario, setFiltroPerfilUsuario] = useState('todos')
+  const [filtroSituacaoUsuario, setFiltroSituacaoUsuario] = useState('todos')
   const [perfisEscolhidos, setPerfisEscolhidos] = useState({})
   const [nomesEntregadores, setNomesEntregadores] = useState({})
   const [recebendoId, setRecebendoId] = useState(null)
   const [rejeitandoId, setRejeitandoId] = useState(null)
+  const [alterandoStatusId, setAlterandoStatusId] = useState(null)
+  const [contaSuspensa, setContaSuspensa] = useState(false)
 
   const [codigo, setCodigo] = useState('')
   const [cidadeId, setCidadeId] = useState('')
@@ -233,11 +239,20 @@ function App() {
       return
     }
 
-    if (!data || !data.ativo) {
+    if (!data) {
+      setContaSuspensa(false)
       setPerfil(null)
       return
     }
 
+    if (!data.ativo) {
+      setContaSuspensa(true)
+      setPerfil(null)
+      setErro('Sua conta está sem acesso ativo. Se você acabou de se cadastrar, aguarde a aprovação; caso contrário, procure a equipe responsável.')
+      return
+    }
+
+    setContaSuspensa(false)
     setErro('')
     setPerfil(data)
   }, [])
@@ -306,6 +321,20 @@ function App() {
     setPendentes(data || [])
   }, [])
 
+  const carregarUsuarios = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, nome, perfil, ativo, criado_em')
+      .order('criado_em', { ascending: false })
+
+    if (error) {
+      setErro(`Não foi possível carregar os usuários: ${error.message}`)
+      return
+    }
+
+    setUsuarios(data || [])
+  }, [])
+
   const atualizarDados = useCallback(async () => {
     setAtualizando(true)
     setErro('')
@@ -314,10 +343,11 @@ function App() {
 
     if (['admin', 'base'].includes(perfil?.perfil)) {
       await carregarPendentes()
+      await carregarUsuarios()
     }
 
     setAtualizando(false)
-  }, [carregarDevolucoes, carregarPendentes, perfil])
+  }, [carregarDevolucoes, carregarPendentes, carregarUsuarios, perfil])
 
   async function confirmarRecebimento(devolucaoId) {
     const confirmar = window.confirm(
@@ -407,11 +437,12 @@ function App() {
 
       if (['admin', 'base'].includes(perfil.perfil)) {
         await carregarPendentes()
+        await carregarUsuarios()
       }
     }
 
     carregarDados()
-  }, [usuario, perfil, carregarDevolucoes, carregarPendentes])
+  }, [usuario, perfil, carregarDevolucoes, carregarPendentes, carregarUsuarios])
 
   function mudarModo(novoModo) {
     setErro('')
@@ -623,6 +654,47 @@ function App() {
     }
   }
 
+  async function alterarStatusUsuario(item) {
+    const novoStatus = !item.ativo
+    const acao = novoStatus ? 'reativar' : 'suspender'
+
+    const confirmar = window.confirm(
+      novoStatus
+        ? `Deseja reativar a conta de ${item.nome || 'este usuário'}?`
+        : `Deseja suspender a conta de ${item.nome || 'este usuário'}? O acesso será bloqueado, mas o histórico operacional será mantido.`
+    )
+
+    if (!confirmar) return
+
+    setErro('')
+    setSucesso('')
+    setAlterandoStatusId(item.id)
+
+    try {
+      const { error } = await supabase.rpc('alterar_status_usuario', {
+        p_usuario_id: item.id,
+        p_ativo: novoStatus,
+      })
+
+      if (error) {
+        setErro(error.message || `Não foi possível ${acao} esta conta.`)
+        return
+      }
+
+      setSucesso(
+        novoStatus
+          ? 'Conta reativada com sucesso!'
+          : 'Conta suspensa com sucesso!'
+      )
+
+      await carregarUsuarios()
+    } catch {
+      setErro(`Ocorreu um erro ao ${acao} esta conta.`)
+    } finally {
+      setAlterandoStatusId(null)
+    }
+  }
+
   async function registrarDevolucao(evento) {
     evento.preventDefault()
     setErro('')
@@ -809,11 +881,12 @@ function App() {
         </header>
 
         <section className="welcome">
-          <span className="eyebrow">CADASTRO EM ANÁLISE</span>
-          <h2>Aguardando aprovação.</h2>
+          <span className="eyebrow">CONTROLE DE ACESSO</span>
+          <h2>{contaSuspensa ? 'Acesso suspenso.' : 'Aguardando aprovação.'}</h2>
           <p>
-            Sua conta ainda não tem acesso à operação. Aguarde a liberação
-            do administrador da P. MELLO Transportes.
+            {contaSuspensa
+              ? 'Sua conta está temporariamente sem acesso à operação. Entre em contato com o administrador da P. MELLO Transportes.'
+              : 'Sua conta ainda não tem acesso à operação. Aguarde a liberação da equipe responsável.'}
           </p>
 
           {erro && <p className="error-message">{erro}</p>}
@@ -847,7 +920,10 @@ function App() {
         ? [{ id: 'registrar', titulo: 'Registrar devolução', icone: '+' }]
         : []),
       ...(podeConferir
-        ? [{ id: 'central', titulo: 'Central de devoluções', icone: '▤' }]
+        ? [
+            { id: 'central', titulo: 'Central de devoluções', icone: '▤' },
+            { id: 'usuarios', titulo: 'Gestão de usuários', icone: '♙' },
+          ]
         : []),
       { id: 'historico', titulo: 'Histórico de devoluções', icone: '◷' },
       ...(ehAdmin
@@ -1487,6 +1563,118 @@ function App() {
               </>
             )}
 
+            {paginaAtual === 'usuarios' && podeConferir && (() => {
+              const idsPendentes = new Set(pendentes.map((item) => item.id))
+              const ativos = usuarios.filter((item) => item.ativo && !idsPendentes.has(item.id)).length
+              const suspensos = usuarios.filter((item) => !item.ativo && !idsPendentes.has(item.id)).length
+              const usuariosFiltrados = usuarios.filter((item) => {
+                const termo = buscaUsuario.trim().toLowerCase()
+                const correspondeBusca = !termo || (item.nome || '').toLowerCase().includes(termo) || item.id.toLowerCase().includes(termo)
+                const correspondePerfil = filtroPerfilUsuario === 'todos' || item.perfil === filtroPerfilUsuario
+                const situacao = idsPendentes.has(item.id) ? 'pendente' : item.ativo ? 'ativo' : 'suspenso'
+                const correspondeSituacao = filtroSituacaoUsuario === 'todos' || situacao === filtroSituacaoUsuario
+                return correspondeBusca && correspondePerfil && correspondeSituacao
+              })
+
+              return (
+                <>
+                  <section className="dashboard-heading">
+                    <div>
+                      <span className="eyebrow">CONTROLE DE ACESSOS</span>
+                      <h3>Gestão de usuários</h3>
+                      <p>Consulte solicitações, perfis e situação das contas da operação.</p>
+                    </div>
+                    <button className="refresh-button" type="button" disabled={atualizando} onClick={async () => {
+                      setAtualizando(true)
+                      await carregarPendentes()
+                      await carregarUsuarios()
+                      setAtualizando(false)
+                    }}>{atualizando ? 'Atualizando...' : '↻ Atualizar'}</button>
+                  </section>
+
+                  <section className="dashboard-cards">
+                    <article className="metric-card success"><span className="metric-label">Usuários ativos</span><strong>{ativos}</strong><small>Contas liberadas para acessar</small></article>
+                    <article className="metric-card warning"><span className="metric-label">Cadastros pendentes</span><strong>{pendentes.length}</strong><small>Aguardando análise da equipe</small></article>
+                    <article className="metric-card"><span className="metric-label">Usuários suspensos</span><strong>{suspensos}</strong><small>Contas sem acesso ativo</small></article>
+                  </section>
+
+                  <section className="content-panel">
+                    <div className="panel-heading"><div><h3>Solicitações de acesso</h3><p>A base e o administrador podem aprovar ou rejeitar novos cadastros.</p></div></div>
+                    {pendentes.length === 0 ? <p className="notice">Nenhum cadastro pendente.</p> : pendentes.map((item) => (
+                      <article className="action-card" key={item.id}>
+                        <span className="action-icon">?</span>
+                        <span className="action-text">
+                          <strong>{item.nome}</strong>
+                          <small>{item.email}</small>
+                          <small>Solicitado em: {formatarData(item.criado_em)}</small>
+                          <label htmlFor={`perfil-usuario-${item.id}`}>Perfil para liberar</label>
+                          <select id={`perfil-usuario-${item.id}`} value={perfisEscolhidos[item.id] || 'entregador'} onChange={(e) => setPerfisEscolhidos((anterior) => ({ ...anterior, [item.id]: e.target.value }))}>
+                            <option value="entregador">Entregador</option><option value="base">Equipe da base</option>
+                          </select>
+                          <button className="login-button" disabled={enviando || rejeitandoId !== null} onClick={() => aprovarUsuario(item.id)} type="button">{enviando ? 'Aprovando...' : 'Aprovar acesso'}</button>
+                          <button className="logout" style={{ width: '100%', marginTop: '8px', borderColor: '#dc5555', color: '#ff7777' }} disabled={enviando || rejeitandoId !== null} onClick={() => rejeitarUsuario(item.id, item.nome)} type="button">{rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}</button>
+                        </span>
+                      </article>
+                    ))}
+                  </section>
+
+                  <section className="content-panel">
+                    <div className="panel-heading"><div><h3>Usuários cadastrados</h3><p>Lista de contas e respectivos níveis de acesso.</p></div><span className="notice">{usuariosFiltrados.length} registro(s)</span></div>
+                    <div className="filters">
+                      <input aria-label="Buscar usuário" placeholder="Buscar por nome ou ID" value={buscaUsuario} onChange={(e) => setBuscaUsuario(e.target.value)} />
+                      <select aria-label="Filtrar por perfil" value={filtroPerfilUsuario} onChange={(e) => setFiltroPerfilUsuario(e.target.value)}><option value="todos">Todos os perfis</option><option value="admin">Administrador</option><option value="base">Equipe da base</option><option value="entregador">Entregador</option></select>
+                      <select aria-label="Filtrar por situação" value={filtroSituacaoUsuario} onChange={(e) => setFiltroSituacaoUsuario(e.target.value)}><option value="todos">Todas as situações</option><option value="ativo">Ativos</option><option value="pendente">Pendentes</option><option value="suspenso">Suspensos</option></select>
+                    </div>
+                    {usuariosFiltrados.length === 0 ? <p className="notice">Nenhum usuário encontrado com esses filtros. Se houver erro de permissão, confira as políticas de leitura da tabela profiles no Supabase.</p> : usuariosFiltrados.map((item) => {
+                      const pendente = idsPendentes.has(item.id)
+                      const situacao = pendente ? 'Pendente' : item.ativo ? 'Ativo' : 'Suspenso'
+                      const perfilTexto = item.perfil === 'admin' ? 'Administrador' : item.perfil === 'base' ? 'Equipe da base' : 'Entregador'
+                      return (
+                        <article className="action-card" key={item.id}>
+                          <span className="action-icon">
+                            {item.ativo ? '✓' : pendente ? '!' : '⏸'}
+                          </span>
+                          <span className="action-text">
+                            <strong>{item.nome || 'Usuário sem nome'}</strong>
+                            <small>Perfil: {perfilTexto}</small>
+                            <small>Situação: {situacao}</small>
+                            <small>Cadastrado em: {formatarData(item.criado_em)}</small>
+
+                            {ehAdmin &&
+                              item.id !== usuario.id &&
+                              !pendente &&
+                              (!pendente) && (
+                                <button
+                                  type="button"
+                                  className={item.ativo ? 'logout' : 'login-button'}
+                                  title={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                  aria-label={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                  disabled={alterandoStatusId !== null}
+                                  onClick={() => alterarStatusUsuario(item)}
+                                  style={{
+                                    width: 'auto',
+                                    minWidth: '150px',
+                                    marginTop: '12px',
+                                    borderColor: item.ativo ? '#dc5555' : '#ffd400',
+                                    color: item.ativo ? '#ff7777' : '#111',
+                                  }}
+                                >
+                                  {alterandoStatusId === item.id
+                                    ? 'Processando...'
+                                    : item.ativo
+                                      ? '⏸ Suspender conta'
+                                      : '▶ Ativar conta'}
+                                </button>
+                              )}
+                          </span>
+                        </article>
+                      )
+                    })}
+                  </section>
+                </>
+              )
+            })()}
+
             {paginaAtual === 'configuracoes' && ehAdmin && (
               <>
                 <section className="content-panel">
@@ -1498,74 +1686,6 @@ function App() {
                   </div>
                 </section>
 
-                <section className="content-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h3>Solicitações de acesso</h3>
-                      <p>Gerencie os novos cadastros da equipe.</p>
-                    </div>
-                    <button
-                      className="refresh-button"
-                      type="button"
-                      onClick={carregarPendentes}
-                    >
-                      Atualizar
-                    </button>
-                  </div>
-
-                  {pendentes.length === 0 ? (
-                    <p className="notice">Nenhum cadastro pendente.</p>
-                  ) : (
-                    pendentes.map((item) => (
-                      <article className="action-card" key={item.id}>
-                        <span className="action-icon">?</span>
-                        <span className="action-text">
-                          <strong>{item.nome}</strong>
-                          <small>{item.email}</small>
-                          <small>Solicitado em: {formatarData(item.criado_em)}</small>
-
-                          <label htmlFor={`perfil-config-${item.id}`}>Perfil para liberar</label>
-                          <select
-                            id={`perfil-config-${item.id}`}
-                            value={perfisEscolhidos[item.id] || 'entregador'}
-                            onChange={(e) =>
-                              setPerfisEscolhidos((anterior) => ({
-                                ...anterior,
-                                [item.id]: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="entregador">Entregador</option>
-                            <option value="base">Equipe da base</option>
-                          </select>
-
-                          <button
-                            className="login-button"
-                            disabled={enviando || rejeitandoId !== null}
-                            onClick={() => aprovarUsuario(item.id)}
-                            type="button"
-                          >
-                            {enviando ? 'Aprovando...' : 'Aprovar acesso'}
-                          </button>
-                          <button
-                            className="logout"
-                            style={{
-                              width: '100%',
-                              marginTop: '8px',
-                              borderColor: '#dc5555',
-                              color: '#ff7777',
-                            }}
-                            disabled={enviando || rejeitandoId !== null}
-                            onClick={() => rejeitarUsuario(item.id, item.nome)}
-                            type="button"
-                          >
-                            {rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}
-                          </button>
-                        </span>
-                      </article>
-                    ))
-                  )}
-                </section>
               </>
             )}
 
