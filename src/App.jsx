@@ -55,15 +55,18 @@ function App() {
   const videoRef = useRef(null)
   const leitorRef = useRef(null)
   const controlesCameraRef = useRef(null)
+  const iniciandoCameraRef = useRef(false)
 
+  // ENCERRA A CÂMERA E LIBERA O DISPOSITIVO
   const pararCamera = useCallback(() => {
     try {
       controlesCameraRef.current?.stop()
     } catch {
-      // Evita erro caso a câmera já esteja encerrada.
+      // A câmera pode já estar encerrada.
     }
 
     controlesCameraRef.current = null
+    iniciandoCameraRef.current = false
 
     const video = videoRef.current
 
@@ -75,75 +78,111 @@ function App() {
     setCameraAtiva(false)
   }, [])
 
+  // SOLICITA PERMISSÃO E INICIA A LEITURA
   async function iniciarCamera() {
+    if (iniciandoCameraRef.current || cameraAtiva) return
+
     setErro('')
     setSucesso('')
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setErro('Seu navegador não permite acessar a câmera. Utilize o Chrome ou outro navegador atualizado.')
+      setErro(
+        'Seu navegador não permite acessar a câmera. Abra o sistema pelo Chrome ou Safari atualizado, utilizando o endereço HTTPS.'
+      )
       return
     }
 
+    iniciandoCameraRef.current = true
+
+    let stream = null
+
     try {
-      setCameraAtiva(true)
+      // Solicita diretamente ao navegador a permissão para usar a câmera.
+      // A preferência é pela câmera traseira do celular.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      })
 
-      // Aguarda o vídeo estar disponível na tela.
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      const video = videoRef.current
 
-      if (!videoRef.current) {
-        setCameraAtiva(false)
-        setErro('Não foi possível iniciar a visualização da câmera.')
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop())
+        iniciandoCameraRef.current = false
+        setErro('Não foi possível abrir a visualização da câmera.')
         return
       }
 
+      // Exibe a área da câmera.
+      setCameraAtiva(true)
+
+      // Aguarda a atualização visual antes de iniciar o vídeo.
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+
+      video.srcObject = stream
+      video.muted = true
+      video.playsInline = true
+
+      await video.play()
+
+      // Inicializa o leitor de códigos.
       const leitor = new BrowserMultiFormatReader()
       leitorRef.current = leitor
 
-      const dispositivos = await leitor.listVideoInputDevices()
-
-      if (!dispositivos || dispositivos.length === 0) {
-        setCameraAtiva(false)
-        setErro('Nenhuma câmera foi encontrada neste dispositivo.')
-        return
-      }
-
-      // Dá preferência à câmera traseira do celular.
-      const cameraTraseira = dispositivos.find((dispositivo) =>
-        /back|rear|environment|traseira|trás/i.test(dispositivo.label)
-      )
-
-      const cameraEscolhida = cameraTraseira || dispositivos[0]
-
-      const controles = await leitor.decodeFromVideoDevice(
-        cameraEscolhida.deviceId,
-        videoRef.current,
+      // Faz a leitura utilizando o fluxo de câmera já autorizado.
+      const controles = await leitor.decodeFromStream(
+        stream,
+        video,
         (resultado) => {
-          if (resultado) {
-            const codigoLido = resultado.getText().trim()
+          if (!resultado) return
 
-            if (codigoLido) {
-              setCodigo(codigoLido)
-              setSucesso('Código lido com sucesso! Confira os dados antes de registrar.')
-              pararCamera()
-            }
+          const codigoLido = resultado.getText().trim()
+
+          if (codigoLido) {
+            setCodigo(codigoLido)
+            setSucesso(
+              'Código lido com sucesso! Confira os dados antes de registrar.'
+            )
+
+            pararCamera()
           }
         }
       )
 
       controlesCameraRef.current = controles
+      iniciandoCameraRef.current = false
     } catch (erroCamera) {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
+
       pararCamera()
 
       if (
         erroCamera?.name === 'NotAllowedError' ||
-        erroCamera?.name === 'PermissionDeniedError'
+        erroCamera?.name === 'PermissionDeniedError' ||
+        erroCamera?.name === 'SecurityError'
       ) {
-        setErro('Acesso à câmera negado. Autorize o uso da câmera nas configurações do navegador.')
+        setErro(
+          'Permissão da câmera bloqueada. Autorize o acesso à câmera nas configurações do navegador e tente novamente.'
+        )
       } else if (erroCamera?.name === 'NotFoundError') {
-        setErro('Nenhuma câmera foi encontrada neste dispositivo.')
+        setErro('Nenhuma câmera foi encontrada neste celular.')
+      } else if (erroCamera?.name === 'NotReadableError') {
+        setErro(
+          'A câmera está sendo utilizada por outro aplicativo. Feche os outros aplicativos que usam a câmera e tente novamente.'
+        )
       } else {
-        setErro('Não foi possível abrir a câmera. Verifique a permissão e tente novamente.')
+        setErro(
+          'Não foi possível iniciar a câmera. Verifique as permissões do celular e tente novamente.'
+        )
       }
+    } finally {
+      iniciandoCameraRef.current = false
     }
   }
 
@@ -157,12 +196,17 @@ function App() {
   // Encerra a câmera ao fechar ou desmontar o aplicativo.
   useEffect(() => {
     return () => {
-      controlesCameraRef.current?.stop()
+      try {
+        controlesCameraRef.current?.stop()
+      } catch {
+        // Câmera já encerrada.
+      }
 
       const video = videoRef.current
 
       if (video?.srcObject) {
         video.srcObject.getTracks().forEach((track) => track.stop())
+        video.srcObject = null
       }
     }
   }, [])
@@ -1065,13 +1109,18 @@ function App() {
                     type="button"
                     className="refresh-button"
                     onClick={cameraAtiva ? pararCamera : iniciarCamera}
+                    disabled={iniciandoCameraRef.current}
                     style={{
                       width: '100%',
                       marginTop: '10px',
                       marginBottom: '15px',
                     }}
                   >
-                    {cameraAtiva ? '✕ Fechar câmera' : '▣ Ler código pela câmera'}
+                    {cameraAtiva
+                      ? '✕ Fechar câmera'
+                      : iniciandoCameraRef.current
+                        ? 'Solicitando acesso à câmera...'
+                        : '▣ Ler código pela câmera'}
                   </button>
 
                   <div
@@ -1096,6 +1145,7 @@ function App() {
                         display: 'block',
                       }}
                     />
+
                     <p
                       style={{
                         color: '#ffd400',
