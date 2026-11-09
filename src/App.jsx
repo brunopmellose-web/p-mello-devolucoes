@@ -36,6 +36,7 @@ function App() {
   const [perfisEscolhidos, setPerfisEscolhidos] = useState({})
   const [nomesEntregadores, setNomesEntregadores] = useState({})
   const [recebendoId, setRecebendoId] = useState(null)
+  const [rejeitandoId, setRejeitandoId] = useState(null)
 
   const [codigo, setCodigo] = useState('')
   const [cidadeId, setCidadeId] = useState('')
@@ -311,7 +312,7 @@ function App() {
 
     await carregarDevolucoes()
 
-    if (perfil?.perfil === 'admin') {
+    if (['admin', 'base'].includes(perfil?.perfil)) {
       await carregarPendentes()
     }
 
@@ -404,7 +405,7 @@ function App() {
 
       await carregarDevolucoes()
 
-      if (perfil.perfil === 'admin') {
+      if (['admin', 'base'].includes(perfil.perfil)) {
         await carregarPendentes()
       }
     }
@@ -477,7 +478,7 @@ function App() {
     setSenha('')
     setNome('')
     setModo('login')
-    setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação do administrador.')
+    setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação da equipe responsável.')
   }
 
   async function recuperarSenha(evento) {
@@ -574,12 +575,52 @@ function App() {
     setEnviando(false)
 
     if (error) {
-      setErro('Não foi possível aprovar o cadastro. Confirme se sua conta é um administrador ativo.')
+      setErro(error.message || 'Não foi possível aprovar o cadastro. Verifique suas permissões.')
       return
     }
 
+    setPerfisEscolhidos((anterior) => {
+      const atualizado = { ...anterior }
+      delete atualizado[id]
+      return atualizado
+    })
     setSucesso('Cadastro aprovado com sucesso.')
     await carregarPendentes()
+  }
+
+  async function rejeitarUsuario(id, nomeUsuario) {
+    const confirmar = window.confirm(
+      `Tem certeza que deseja rejeitar o cadastro de ${nomeUsuario}? A conta será excluída permanentemente se não possuir vínculos operacionais.`
+    )
+
+    if (!confirmar) return
+
+    setErro('')
+    setSucesso('')
+    setRejeitandoId(id)
+
+    try {
+      const { error } = await supabase.rpc('rejeitar_cadastro', {
+        p_usuario_id: id,
+      })
+
+      if (error) {
+        setErro(error.message || 'Não foi possível rejeitar o cadastro.')
+        return
+      }
+
+      setPerfisEscolhidos((anterior) => {
+        const atualizado = { ...anterior }
+        delete atualizado[id]
+        return atualizado
+      })
+      setSucesso('Cadastro rejeitado e conta excluída com sucesso.')
+      await carregarPendentes()
+    } catch {
+      setErro('Ocorreu um erro ao rejeitar o cadastro.')
+    } finally {
+      setRejeitandoId(null)
+    }
   }
 
   async function registrarDevolucao(evento) {
@@ -954,7 +995,7 @@ function App() {
                     <small>Recebimento físico confirmado</small>
                   </article>
 
-                  {ehAdmin && (
+                  {podeConferir && (
                     <article className="metric-card">
                       <span className="metric-label">Cadastros pendentes</span>
                       <strong>{pendentes.length}</strong>
@@ -1033,12 +1074,12 @@ function App() {
                   )}
                 </section>
 
-                {ehAdmin && (
+                {podeConferir && (
                   <section className="content-panel">
                     <div className="panel-heading">
                       <div>
                         <h3>Solicitações de acesso</h3>
-                        <p>Cadastros que aguardam aprovação do administrador.</p>
+                        <p>Cadastros que aguardam aprovação da equipe responsável.</p>
                       </div>
                       <span className="count-pill">{pendentes.length} pendente(s)</span>
                     </div>
@@ -1069,11 +1110,25 @@ function App() {
                             </select>
                             <button
                               className="login-button"
-                              disabled={enviando}
+                              disabled={enviando || rejeitandoId !== null}
                               onClick={() => aprovarUsuario(item.id)}
                               type="button"
                             >
                               {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                            </button>
+                            <button
+                              className="logout"
+                              style={{
+                                width: '100%',
+                                marginTop: '8px',
+                                borderColor: '#dc5555',
+                                color: '#ff7777',
+                              }}
+                              disabled={enviando || rejeitandoId !== null}
+                              onClick={() => rejeitarUsuario(item.id, item.nome)}
+                              type="button"
+                            >
+                              {rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}
                             </button>
                           </span>
                         </article>
@@ -1486,11 +1541,25 @@ function App() {
 
                           <button
                             className="login-button"
-                            disabled={enviando}
+                            disabled={enviando || rejeitandoId !== null}
                             onClick={() => aprovarUsuario(item.id)}
                             type="button"
                           >
                             {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                          </button>
+                          <button
+                            className="logout"
+                            style={{
+                              width: '100%',
+                              marginTop: '8px',
+                              borderColor: '#dc5555',
+                              color: '#ff7777',
+                            }}
+                            disabled={enviando || rejeitandoId !== null}
+                            onClick={() => rejeitarUsuario(item.id, item.nome)}
+                            type="button"
+                          >
+                            {rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}
                           </button>
                         </span>
                       </article>
@@ -1606,7 +1675,7 @@ function App() {
             <h3>Solicitar acesso</h3>
             <p className="notice">
               Preencha seus dados. O acesso à operação depende da aprovação
-              do administrador.
+              da equipe responsável.
             </p>
 
             <form onSubmit={cadastrar}>
