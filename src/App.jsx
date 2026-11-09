@@ -17,6 +17,196 @@ const formatarData = (data) => {
   return new Date(data).toLocaleString('pt-BR')
 }
 
+// DISTRIBUIÇÃO DE DEVOLUÇÕES POR CIDADE
+function DistribuicaoCidades({ dados }) {
+  const maiorVolume = Math.max(1, ...dados.map((item) => item.total))
+
+  return (
+    <div style={{ display: 'grid', gap: '20px', marginTop: '20px' }}>
+      {dados.length === 0 ? (
+        <p className="notice">Nenhuma cidade cadastrada.</p>
+      ) : (
+        dados.map((item) => (
+          <div key={item.id}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                marginBottom: '8px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <strong style={{ fontSize: '14px' }}>{item.nome}</strong>
+
+              <strong style={{ fontSize: '15px', color: '#ffd400' }}>
+                {item.total} devoluções
+              </strong>
+            </div>
+
+            <div
+              style={{
+                height: '12px',
+                width: '100%',
+                background: '#292929',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                display: 'flex',
+              }}
+            >
+              {item.recebidas > 0 && (
+                <div
+                  style={{
+                    width: `${(item.recebidas / maiorVolume) * 100}%`,
+                    background: '#22c55e',
+                    height: '100%',
+                  }}
+                />
+              )}
+
+              {item.pendentes > 0 && (
+                <div
+                  style={{
+                    width: `${(item.pendentes / maiorVolume) * 100}%`,
+                    background: '#ffd400',
+                    height: '100%',
+                  }}
+                />
+              )}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '8px',
+                flexWrap: 'wrap',
+                marginTop: '8px',
+                fontSize: '12px',
+                color: '#aaa',
+              }}
+            >
+              <span>
+                <span style={{ color: '#22c55e' }}>●</span>
+                {' '}{item.recebidas} recebidas
+              </span>
+
+              <span>
+                <span style={{ color: '#ffd400' }}>●</span>
+                {' '}{item.pendentes} pendentes
+              </span>
+
+              <strong style={{ color: '#fff' }}>
+                {item.percentual}% concluído
+              </strong>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+// DISTRIBUIÇÃO DE DEVOLUÇÕES POR MOTIVO
+function DistribuicaoMotivos({ dados }) {
+  const maiorVolume = Math.max(1, ...dados.map((item) => item[1]))
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: '22px',
+        marginTop: '24px',
+        width: '100%',
+      }}
+    >
+      {dados.length === 0 ? (
+        <p className="notice">Nenhum motivo registrado.</p>
+      ) : (
+        dados.map(([nomeMotivo, quantidade]) => {
+          const percentual = (quantidade / maiorVolume) * 100
+
+          return (
+            <div
+              key={nomeMotivo}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '9px',
+                width: '100%',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '12px',
+                  width: '100%',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  style={{
+                    color: '#f5f5f5',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    textAlign: 'left',
+                  }}
+                >
+                  {nomeMotivo}
+                </span>
+
+                <strong
+                  style={{
+                    color: '#ffd400',
+                    fontSize: '15px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {quantidade} {quantidade === 1 ? 'devolução' : 'devoluções'}
+                </strong>
+              </div>
+
+              <div
+                style={{
+                  width: '100%',
+                  height: '13px',
+                  background: '#292929',
+                  borderRadius: '20px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${percentual}%`,
+                    height: '100%',
+                    background:
+                      'linear-gradient(90deg, #d6a900 0%, #ffd400 100%)',
+                    borderRadius: '20px',
+                    transition: 'width 0.4s ease',
+                  }}
+                />
+              </div>
+
+              <span
+                style={{
+                  color: '#999',
+                  fontSize: '12px',
+                  textAlign: 'right',
+                }}
+              >
+                {Math.round(percentual)}% do maior volume
+              </span>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
 function App() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
@@ -52,10 +242,16 @@ function App() {
   const [sessaoRecuperacao, setSessaoRecuperacao] = useState(false)
   const [paginaAtiva, setPaginaAtiva] = useState('inicio')
 
+  // FILTROS DO HISTÓRICO
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroCidade, setFiltroCidade] = useState('todas')
   const [filtroMotivo, setFiltroMotivo] = useState('todos')
+
+  // FILTROS EXCLUSIVOS DA CENTRAL DE DEVOLUÇÕES
+  const [buscaCentral, setBuscaCentral] = useState('')
+  const [filtroCidadeCentral, setFiltroCidadeCentral] = useState('todas')
+  const [filtroMotivoCentral, setFiltroMotivoCentral] = useState('todos')
 
   // CONTROLE DA CÂMERA E DO LEITOR DE CÓDIGO
   const [cameraAtiva, setCameraAtiva] = useState(false)
@@ -104,8 +300,6 @@ function App() {
     let stream = null
 
     try {
-      // Solicita diretamente ao navegador a permissão para usar a câmera.
-      // A preferência é pela câmera traseira do celular.
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -124,10 +318,8 @@ function App() {
         return
       }
 
-      // Exibe a área da câmera.
       setCameraAtiva(true)
 
-      // Aguarda a atualização visual antes de iniciar o vídeo.
       await new Promise((resolve) => requestAnimationFrame(resolve))
 
       video.srcObject = stream
@@ -136,11 +328,9 @@ function App() {
 
       await video.play()
 
-      // Inicializa o leitor de códigos.
       const leitor = new BrowserMultiFormatReader()
       leitorRef.current = leitor
 
-      // Faz a leitura utilizando o fluxo de câmera já autorizado.
       const controles = await leitor.decodeFromStream(
         stream,
         video,
@@ -193,14 +383,12 @@ function App() {
     }
   }
 
-  // Encerra a câmera ao sair da tela de registro.
   useEffect(() => {
     if (paginaAtiva !== 'registrar' && cameraAtiva) {
       pararCamera()
     }
   }, [paginaAtiva, cameraAtiva, pararCamera])
 
-  // Encerra a câmera ao fechar ou desmontar o aplicativo.
   useEffect(() => {
     return () => {
       try {
@@ -617,6 +805,7 @@ function App() {
     })
     setSucesso('Cadastro aprovado com sucesso.')
     await carregarPendentes()
+    await carregarUsuarios()
   }
 
   async function rejeitarUsuario(id, nomeUsuario) {
@@ -647,6 +836,7 @@ function App() {
       })
       setSucesso('Cadastro rejeitado e conta excluída com sucesso.')
       await carregarPendentes()
+      await carregarUsuarios()
     } catch {
       setErro('Ocorreu um erro ao rejeitar o cadastro.')
     } finally {
@@ -755,14 +945,29 @@ function App() {
     (item) => item.status === 'recebido'
   ).length
 
+  // FILTROS DO HISTÓRICO — PESQUISA NORMALIZADA
   const devolucoesFiltradas = useMemo(() => {
+    const normalizar = (valor) =>
+      String(valor ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+
+    const termo = normalizar(busca)
+
     return devolucoes.filter((item) => {
-      const termo = busca.trim().toLowerCase()
+      const codigo = normalizar(item.codigo_rastreio)
+      const entregador = normalizar(nomesEntregadores[item.entregador_id])
+      const cidade = normalizar(nomesCidades[item.cidade_id])
+      const motivoItem = normalizar(item.motivo)
 
       const correspondeBusca =
         !termo ||
-        item.codigo_rastreio?.toLowerCase().includes(termo) ||
-        nomesEntregadores[item.entregador_id]?.toLowerCase().includes(termo)
+        codigo.includes(termo) ||
+        entregador.includes(termo) ||
+        cidade.includes(termo) ||
+        motivoItem.includes(termo)
 
       const correspondeStatus =
         filtroStatus === 'todos' ||
@@ -770,10 +975,12 @@ function App() {
         (filtroStatus === 'recebido' && item.status === 'recebido')
 
       const correspondeCidade =
-        filtroCidade === 'todas' || item.cidade_id === filtroCidade
+        filtroCidade === 'todas' ||
+        String(item.cidade_id) === String(filtroCidade)
 
       const correspondeMotivo =
-        filtroMotivo === 'todos' || item.motivo === filtroMotivo
+        filtroMotivo === 'todos' ||
+        normalizar(item.motivo) === normalizar(filtroMotivo)
 
       return (
         correspondeBusca &&
@@ -789,24 +996,110 @@ function App() {
     filtroCidade,
     filtroMotivo,
     nomesEntregadores,
+    nomesCidades,
   ])
 
+  // FILTROS EXCLUSIVOS DA CENTRAL — SOMENTE DEVOLUÇÕES PENDENTES
+  const devolucoesCentralFiltradas = useMemo(() => {
+    const normalizar = (valor) =>
+      String(valor ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+
+    const termo = normalizar(buscaCentral)
+
+    return devolucoes.filter((item) => {
+      if (item.status === 'recebido') return false
+
+      const codigo = normalizar(item.codigo_rastreio)
+      const entregador = normalizar(nomesEntregadores[item.entregador_id])
+      const cidade = normalizar(nomesCidades[item.cidade_id])
+      const motivoItem = normalizar(item.motivo)
+
+      const correspondeBusca =
+        !termo ||
+        codigo.includes(termo) ||
+        entregador.includes(termo) ||
+        cidade.includes(termo) ||
+        motivoItem.includes(termo)
+
+      const correspondeCidade =
+        filtroCidadeCentral === 'todas' ||
+        String(item.cidade_id) === String(filtroCidadeCentral)
+
+      const correspondeMotivo =
+        filtroMotivoCentral === 'todos' ||
+        motivoItem === normalizar(filtroMotivoCentral)
+
+      return correspondeBusca && correspondeCidade && correspondeMotivo
+    })
+  }, [
+    devolucoes,
+    buscaCentral,
+    filtroCidadeCentral,
+    filtroMotivoCentral,
+    nomesEntregadores,
+    nomesCidades,
+  ])
+
+  // INDICADORES DE DEVOLUÇÕES POR CIDADE
   const dadosPorCidade = useMemo(() => {
     const contagem = {}
 
-    devolucoes.forEach((item) => {
-      const cidade = nomesCidades[item.cidade_id] || 'Não identificada'
-      contagem[cidade] = (contagem[cidade] || 0) + 1
+    cidades.forEach((cidade) => {
+      contagem[cidade.id] = {
+        id: cidade.id,
+        nome: cidade.nome,
+        total: 0,
+        recebidas: 0,
+        pendentes: 0,
+        percentual: 0,
+      }
     })
 
-    return Object.entries(contagem).sort((a, b) => b[1] - a[1])
-  }, [devolucoes, nomesCidades])
+    devolucoes.forEach((item) => {
+      const id = item.cidade_id
 
+      if (!contagem[id]) {
+        contagem[id] = {
+          id: id || 'nao-identificada',
+          nome: 'Não identificada',
+          total: 0,
+          recebidas: 0,
+          pendentes: 0,
+          percentual: 0,
+        }
+      }
+
+      contagem[id].total += 1
+
+      if (item.status === 'recebido') {
+        contagem[id].recebidas += 1
+      } else {
+        contagem[id].pendentes += 1
+      }
+    })
+
+    return Object.values(contagem)
+      .map((item) => ({
+        ...item,
+        percentual:
+          item.total > 0
+            ? Math.round((item.recebidas / item.total) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome))
+  }, [devolucoes, cidades])
+
+  // INDICADORES DE DEVOLUÇÕES POR MOTIVO
   const dadosPorMotivo = useMemo(() => {
     const contagem = {}
 
     devolucoes.forEach((item) => {
-      contagem[item.motivo] = (contagem[item.motivo] || 0) + 1
+      const motivoItem = item.motivo || 'Não informado'
+      contagem[motivoItem] = (contagem[motivoItem] || 0) + 1
     })
 
     return Object.entries(contagem).sort((a, b) => b[1] - a[1])
@@ -940,19 +1233,11 @@ function App() {
     const tituloPagina =
       menu.find((item) => item.id === paginaAtual)?.titulo || 'Visão geral'
 
-    const listaHistorico = devolucoesFiltradas.filter((item) =>
-      paginaAtual === 'central' ? item.status !== 'recebido' : true
-    )
+    const listaHistorico = devolucoesFiltradas
+    const listaCentral = devolucoesCentralFiltradas
 
-    const maiorVolumeCidade = Math.max(
-      1,
-      ...dadosPorCidade.map((item) => item[1])
-    )
-
-    const maiorVolumeMotivo = Math.max(
-      1,
-      ...dadosPorMotivo.map((item) => item[1])
-    )
+    const listaExibida =
+      paginaAtual === 'central' ? listaCentral : listaHistorico
 
     return (
       <main className="dashboard">
@@ -1085,32 +1370,13 @@ function App() {
                     <div className="panel-heading">
                       <div>
                         <h3>Distribuição por cidade</h3>
-                        <p>Volume de devoluções nos registros disponíveis.</p>
+                        <p>
+                          Volume, recebimentos e pendências de cada cidade.
+                        </p>
                       </div>
                     </div>
 
-                    {dadosPorCidade.length === 0 ? (
-                      <p className="notice">Ainda não existem dados para apresentar.</p>
-                    ) : (
-                      <div className="report-bars">
-                        {dadosPorCidade.map(([cidade, quantidade]) => (
-                          <div className="report-bar-row" key={cidade}>
-                            <div className="report-bar-info">
-                              <span>{cidade}</span>
-                              <strong>{quantidade}</strong>
-                            </div>
-                            <div className="report-bar-track">
-                              <div
-                                className="report-bar-fill"
-                                style={{
-                                  width: `${(quantidade / maiorVolumeCidade) * 100}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <DistribuicaoCidades dados={dadosPorCidade} />
                   </section>
                 )}
 
@@ -1347,7 +1613,7 @@ function App() {
                         ? 'Devoluções aguardando conferência'
                         : 'Histórico de devoluções'}
                     </h3>
-                    <p>{listaHistorico.length} registro(s) encontrado(s).</p>
+                    <p>{listaExibida.length} registro(s) encontrado(s).</p>
                   </div>
 
                   <button
@@ -1363,45 +1629,73 @@ function App() {
                 <div className="history-filters">
                   <input
                     type="search"
-                    placeholder="Pesquisar código ou entregador..."
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Pesquisar código, entregador, cidade ou motivo..."
+                    value={paginaAtual === 'central' ? buscaCentral : busca}
+                    onChange={(e) =>
+                      paginaAtual === 'central'
+                        ? setBuscaCentral(e.target.value)
+                        : setBusca(e.target.value)
+                    }
                   />
 
-                  <select
-                    value={filtroStatus}
-                    onChange={(e) => setFiltroStatus(e.target.value)}
-                  >
-                    <option value="todos">Todos os status</option>
-                    <option value="pendente">Aguardando recebimento</option>
-                    <option value="recebido">Recebidos</option>
-                  </select>
+                  {paginaAtual === 'historico' && (
+                    <select
+                      value={filtroStatus}
+                      onChange={(e) => setFiltroStatus(e.target.value)}
+                    >
+                      <option value="todos">Todos os status</option>
+                      <option value="pendente">Aguardando recebimento</option>
+                      <option value="recebido">Recebidos</option>
+                    </select>
+                  )}
 
                   <select
-                    value={filtroCidade}
-                    onChange={(e) => setFiltroCidade(e.target.value)}
+                    value={
+                      paginaAtual === 'central'
+                        ? filtroCidadeCentral
+                        : filtroCidade
+                    }
+                    onChange={(e) =>
+                      paginaAtual === 'central'
+                        ? setFiltroCidadeCentral(e.target.value)
+                        : setFiltroCidade(e.target.value)
+                    }
                   >
                     <option value="todas">Todas as cidades</option>
                     {cidades.map((cidade) => (
-                      <option key={cidade.id} value={cidade.id}>{cidade.nome}</option>
+                      <option key={cidade.id} value={cidade.id}>
+                        {cidade.nome}
+                      </option>
                     ))}
                   </select>
 
                   <select
-                    value={filtroMotivo}
-                    onChange={(e) => setFiltroMotivo(e.target.value)}
+                    value={
+                      paginaAtual === 'central'
+                        ? filtroMotivoCentral
+                        : filtroMotivo
+                    }
+                    onChange={(e) =>
+                      paginaAtual === 'central'
+                        ? setFiltroMotivoCentral(e.target.value)
+                        : setFiltroMotivo(e.target.value)
+                    }
                   >
                     <option value="todos">Todos os motivos</option>
                     {motivos.map((item) => (
-                      <option key={item} value={item}>{item}</option>
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                 </div>
 
-                {listaHistorico.length === 0 ? (
-                  <p className="notice">Nenhuma devolução encontrada com os filtros selecionados.</p>
+                {listaExibida.length === 0 ? (
+                  <p className="notice">
+                    Nenhuma devolução encontrada com os filtros selecionados.
+                  </p>
                 ) : (
-                  listaHistorico.map((item) => (
+                  listaExibida.map((item) => (
                     <article className="return-detail-card" key={item.id}>
                       <div className="return-detail-heading">
                         <strong>{item.codigo_rastreio}</strong>
@@ -1496,60 +1790,27 @@ function App() {
                   <div className="panel-heading">
                     <div>
                       <h3>Devoluções por cidade</h3>
-                      <p>Distribuição dos registros por localidade.</p>
+                      <p>
+                        Comparativo de recebimentos e pendências por localidade.
+                      </p>
                     </div>
                   </div>
 
-                  {dadosPorCidade.length === 0 ? (
-                    <p className="notice">Sem dados disponíveis.</p>
-                  ) : (
-                    <div className="report-bars">
-                      {dadosPorCidade.map(([cidade, quantidade]) => (
-                        <div className="report-bar-row" key={cidade}>
-                          <div className="report-bar-info">
-                            <span>{cidade}</span>
-                            <strong>{quantidade}</strong>
-                          </div>
-                          <div className="report-bar-track">
-                            <div
-                              className="report-bar-fill"
-                              style={{ width: `${(quantidade / maiorVolumeCidade) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <DistribuicaoCidades dados={dadosPorCidade} />
                 </section>
 
+                {/* PAINEL ATUALIZADO DE DEVOLUÇÕES POR MOTIVO */}
                 <section className="content-panel">
                   <div className="panel-heading">
                     <div>
                       <h3>Devoluções por motivo</h3>
-                      <p>Principais motivos registrados pela equipe.</p>
+                      <p>
+                        Distribuição dos principais motivos registrados pela equipe.
+                      </p>
                     </div>
                   </div>
 
-                  {dadosPorMotivo.length === 0 ? (
-                    <p className="notice">Sem dados disponíveis.</p>
-                  ) : (
-                    <div className="report-bars">
-                      {dadosPorMotivo.map(([nomeMotivo, quantidade]) => (
-                        <div className="report-bar-row" key={nomeMotivo}>
-                          <div className="report-bar-info">
-                            <span>{nomeMotivo}</span>
-                            <strong>{quantidade}</strong>
-                          </div>
-                          <div className="report-bar-track">
-                            <div
-                              className="report-bar-fill"
-                              style={{ width: `${(quantidade / maiorVolumeMotivo) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <DistribuicaoMotivos dados={dadosPorMotivo} />
                 </section>
 
                 <section className="content-panel">
@@ -1567,13 +1828,41 @@ function App() {
               const idsPendentes = new Set(pendentes.map((item) => item.id))
               const ativos = usuarios.filter((item) => item.ativo && !idsPendentes.has(item.id)).length
               const suspensos = usuarios.filter((item) => !item.ativo && !idsPendentes.has(item.id)).length
+
+              const normalizarUsuario = (valor) =>
+                String(valor ?? '')
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .trim()
+                  .toLowerCase()
+
               const usuariosFiltrados = usuarios.filter((item) => {
-                const termo = buscaUsuario.trim().toLowerCase()
-                const correspondeBusca = !termo || (item.nome || '').toLowerCase().includes(termo) || item.id.toLowerCase().includes(termo)
-                const correspondePerfil = filtroPerfilUsuario === 'todos' || item.perfil === filtroPerfilUsuario
-                const situacao = idsPendentes.has(item.id) ? 'pendente' : item.ativo ? 'ativo' : 'suspenso'
-                const correspondeSituacao = filtroSituacaoUsuario === 'todos' || situacao === filtroSituacaoUsuario
-                return correspondeBusca && correspondePerfil && correspondeSituacao
+                const termo = normalizarUsuario(buscaUsuario)
+
+                const correspondeBusca =
+                  !termo ||
+                  normalizarUsuario(item.nome).includes(termo) ||
+                  normalizarUsuario(item.id).includes(termo)
+
+                const correspondePerfil =
+                  filtroPerfilUsuario === 'todos' ||
+                  item.perfil === filtroPerfilUsuario
+
+                const situacao = idsPendentes.has(item.id)
+                  ? 'pendente'
+                  : item.ativo
+                    ? 'ativo'
+                    : 'suspenso'
+
+                const correspondeSituacao =
+                  filtroSituacaoUsuario === 'todos' ||
+                  situacao === filtroSituacaoUsuario
+
+                return (
+                  correspondeBusca &&
+                  correspondePerfil &&
+                  correspondeSituacao
+                )
               })
 
               return (
@@ -1584,92 +1873,201 @@ function App() {
                       <h3>Gestão de usuários</h3>
                       <p>Consulte solicitações, perfis e situação das contas da operação.</p>
                     </div>
-                    <button className="refresh-button" type="button" disabled={atualizando} onClick={async () => {
-                      setAtualizando(true)
-                      await carregarPendentes()
-                      await carregarUsuarios()
-                      setAtualizando(false)
-                    }}>{atualizando ? 'Atualizando...' : '↻ Atualizar'}</button>
+                    <button
+                      className="refresh-button"
+                      type="button"
+                      disabled={atualizando}
+                      onClick={async () => {
+                        setAtualizando(true)
+                        await carregarPendentes()
+                        await carregarUsuarios()
+                        setAtualizando(false)
+                      }}
+                    >
+                      {atualizando ? 'Atualizando...' : '↻ Atualizar'}
+                    </button>
                   </section>
 
                   <section className="dashboard-cards">
-                    <article className="metric-card success"><span className="metric-label">Usuários ativos</span><strong>{ativos}</strong><small>Contas liberadas para acessar</small></article>
-                    <article className="metric-card warning"><span className="metric-label">Cadastros pendentes</span><strong>{pendentes.length}</strong><small>Aguardando análise da equipe</small></article>
-                    <article className="metric-card"><span className="metric-label">Usuários suspensos</span><strong>{suspensos}</strong><small>Contas sem acesso ativo</small></article>
+                    <article className="metric-card success">
+                      <span className="metric-label">Usuários ativos</span>
+                      <strong>{ativos}</strong>
+                      <small>Contas liberadas para acessar</small>
+                    </article>
+                    <article className="metric-card warning">
+                      <span className="metric-label">Cadastros pendentes</span>
+                      <strong>{pendentes.length}</strong>
+                      <small>Aguardando análise da equipe</small>
+                    </article>
+                    <article className="metric-card">
+                      <span className="metric-label">Usuários suspensos</span>
+                      <strong>{suspensos}</strong>
+                      <small>Contas sem acesso ativo</small>
+                    </article>
                   </section>
 
                   <section className="content-panel">
-                    <div className="panel-heading"><div><h3>Solicitações de acesso</h3><p>A base e o administrador podem aprovar ou rejeitar novos cadastros.</p></div></div>
-                    {pendentes.length === 0 ? <p className="notice">Nenhum cadastro pendente.</p> : pendentes.map((item) => (
-                      <article className="action-card" key={item.id}>
-                        <span className="action-icon">?</span>
-                        <span className="action-text">
-                          <strong>{item.nome}</strong>
-                          <small>{item.email}</small>
-                          <small>Solicitado em: {formatarData(item.criado_em)}</small>
-                          <label htmlFor={`perfil-usuario-${item.id}`}>Perfil para liberar</label>
-                          <select id={`perfil-usuario-${item.id}`} value={perfisEscolhidos[item.id] || 'entregador'} onChange={(e) => setPerfisEscolhidos((anterior) => ({ ...anterior, [item.id]: e.target.value }))}>
-                            <option value="entregador">Entregador</option><option value="base">Equipe da base</option>
-                          </select>
-                          <button className="login-button" disabled={enviando || rejeitandoId !== null} onClick={() => aprovarUsuario(item.id)} type="button">{enviando ? 'Aprovando...' : 'Aprovar acesso'}</button>
-                          <button className="logout" style={{ width: '100%', marginTop: '8px', borderColor: '#dc5555', color: '#ff7777' }} disabled={enviando || rejeitandoId !== null} onClick={() => rejeitarUsuario(item.id, item.nome)} type="button">{rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}</button>
-                        </span>
-                      </article>
-                    ))}
-                  </section>
-
-                  <section className="content-panel">
-                    <div className="panel-heading"><div><h3>Usuários cadastrados</h3><p>Lista de contas e respectivos níveis de acesso.</p></div><span className="notice">{usuariosFiltrados.length} registro(s)</span></div>
-                    <div className="filters">
-                      <input aria-label="Buscar usuário" placeholder="Buscar por nome ou ID" value={buscaUsuario} onChange={(e) => setBuscaUsuario(e.target.value)} />
-                      <select aria-label="Filtrar por perfil" value={filtroPerfilUsuario} onChange={(e) => setFiltroPerfilUsuario(e.target.value)}><option value="todos">Todos os perfis</option><option value="admin">Administrador</option><option value="base">Equipe da base</option><option value="entregador">Entregador</option></select>
-                      <select aria-label="Filtrar por situação" value={filtroSituacaoUsuario} onChange={(e) => setFiltroSituacaoUsuario(e.target.value)}><option value="todos">Todas as situações</option><option value="ativo">Ativos</option><option value="pendente">Pendentes</option><option value="suspenso">Suspensos</option></select>
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Solicitações de acesso</h3>
+                        <p>A base e o administrador podem aprovar ou rejeitar novos cadastros.</p>
+                      </div>
                     </div>
-                    {usuariosFiltrados.length === 0 ? <p className="notice">Nenhum usuário encontrado com esses filtros. Se houver erro de permissão, confira as políticas de leitura da tabela profiles no Supabase.</p> : usuariosFiltrados.map((item) => {
-                      const pendente = idsPendentes.has(item.id)
-                      const situacao = pendente ? 'Pendente' : item.ativo ? 'Ativo' : 'Suspenso'
-                      const perfilTexto = item.perfil === 'admin' ? 'Administrador' : item.perfil === 'base' ? 'Equipe da base' : 'Entregador'
-                      return (
-                        <article className="action-card" key={item.id}>
-                          <span className="action-icon">
-                            {item.ativo ? '✓' : pendente ? '!' : '⏸'}
-                          </span>
-                          <span className="action-text">
-                            <strong>{item.nome || 'Usuário sem nome'}</strong>
-                            <small>Perfil: {perfilTexto}</small>
-                            <small>Situação: {situacao}</small>
-                            <small>Cadastrado em: {formatarData(item.criado_em)}</small>
 
-                            {ehAdmin &&
-                              item.id !== usuario.id &&
-                              !pendente &&
-                              (!pendente) && (
-                                <button
-                                  type="button"
-                                  className={item.ativo ? 'logout' : 'login-button'}
-                                  title={item.ativo ? 'Suspender conta' : 'Reativar conta'}
-                                  aria-label={item.ativo ? 'Suspender conta' : 'Reativar conta'}
-                                  disabled={alterandoStatusId !== null}
-                                  onClick={() => alterarStatusUsuario(item)}
-                                  style={{
-                                    width: 'auto',
-                                    minWidth: '150px',
-                                    marginTop: '12px',
-                                    borderColor: item.ativo ? '#dc5555' : '#ffd400',
-                                    color: item.ativo ? '#ff7777' : '#111',
-                                  }}
-                                >
-                                  {alterandoStatusId === item.id
-                                    ? 'Processando...'
-                                    : item.ativo
-                                      ? '⏸ Suspender conta'
-                                      : '▶ Ativar conta'}
-                                </button>
-                              )}
+                    {pendentes.length === 0 ? (
+                      <p className="notice">Nenhum cadastro pendente.</p>
+                    ) : (
+                      pendentes.map((item) => (
+                        <article className="action-card" key={item.id}>
+                          <span className="action-icon">?</span>
+                          <span className="action-text">
+                            <strong>{item.nome}</strong>
+                            <small>{item.email}</small>
+                            <small>Solicitado em: {formatarData(item.criado_em)}</small>
+                            <label htmlFor={`perfil-usuario-${item.id}`}>Perfil para liberar</label>
+                            <select
+                              id={`perfil-usuario-${item.id}`}
+                              value={perfisEscolhidos[item.id] || 'entregador'}
+                              onChange={(e) =>
+                                setPerfisEscolhidos((anterior) => ({
+                                  ...anterior,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="entregador">Entregador</option>
+                              <option value="base">Equipe da base</option>
+                            </select>
+                            <button
+                              className="login-button"
+                              disabled={enviando || rejeitandoId !== null}
+                              onClick={() => aprovarUsuario(item.id)}
+                              type="button"
+                            >
+                              {enviando ? 'Aprovando...' : 'Aprovar acesso'}
+                            </button>
+                            <button
+                              className="logout"
+                              style={{
+                                width: '100%',
+                                marginTop: '8px',
+                                borderColor: '#dc5555',
+                                color: '#ff7777',
+                              }}
+                              disabled={enviando || rejeitandoId !== null}
+                              onClick={() => rejeitarUsuario(item.id, item.nome)}
+                              type="button"
+                            >
+                              {rejeitandoId === item.id ? 'Rejeitando...' : 'Rejeitar cadastro'}
+                            </button>
                           </span>
                         </article>
-                      )
-                    })}
+                      ))
+                    )}
+                  </section>
+
+                  <section className="content-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Usuários cadastrados</h3>
+                        <p>Lista de contas e respectivos níveis de acesso.</p>
+                      </div>
+                      <span className="notice">{usuariosFiltrados.length} registro(s)</span>
+                    </div>
+
+                    <div className="filters">
+                      <input
+                        aria-label="Buscar usuário"
+                        placeholder="Buscar por nome ou ID"
+                        value={buscaUsuario}
+                        onChange={(e) => setBuscaUsuario(e.target.value)}
+                      />
+
+                      <select
+                        aria-label="Filtrar por perfil"
+                        value={filtroPerfilUsuario}
+                        onChange={(e) => setFiltroPerfilUsuario(e.target.value)}
+                      >
+                        <option value="todos">Todos os perfis</option>
+                        <option value="admin">Administrador</option>
+                        <option value="base">Equipe da base</option>
+                        <option value="entregador">Entregador</option>
+                      </select>
+
+                      <select
+                        aria-label="Filtrar por situação"
+                        value={filtroSituacaoUsuario}
+                        onChange={(e) => setFiltroSituacaoUsuario(e.target.value)}
+                      >
+                        <option value="todos">Todas as situações</option>
+                        <option value="ativo">Ativos</option>
+                        <option value="pendente">Pendentes</option>
+                        <option value="suspenso">Suspensos</option>
+                      </select>
+                    </div>
+
+                    {usuariosFiltrados.length === 0 ? (
+                      <p className="notice">
+                        Nenhum usuário encontrado com esses filtros. Se houver erro de permissão, confira as políticas de leitura da tabela profiles no Supabase.
+                      </p>
+                    ) : (
+                      usuariosFiltrados.map((item) => {
+                        const pendente = idsPendentes.has(item.id)
+                        const situacao = pendente
+                          ? 'Pendente'
+                          : item.ativo
+                            ? 'Ativo'
+                            : 'Suspenso'
+
+                        const perfilTexto =
+                          item.perfil === 'admin'
+                            ? 'Administrador'
+                            : item.perfil === 'base'
+                              ? 'Equipe da base'
+                              : 'Entregador'
+
+                        return (
+                          <article className="action-card" key={item.id}>
+                            <span className="action-icon">
+                              {item.ativo ? '✓' : pendente ? '!' : '⏸'}
+                            </span>
+
+                            <span className="action-text">
+                              <strong>{item.nome || 'Usuário sem nome'}</strong>
+                              <small>Perfil: {perfilTexto}</small>
+                              <small>Situação: {situacao}</small>
+                              <small>Cadastrado em: {formatarData(item.criado_em)}</small>
+
+                              {ehAdmin &&
+                                item.id !== usuario.id &&
+                                !pendente && (
+                                  <button
+                                    type="button"
+                                    className={item.ativo ? 'logout' : 'login-button'}
+                                    title={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                    aria-label={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                    disabled={alterandoStatusId !== null}
+                                    onClick={() => alterarStatusUsuario(item)}
+                                    style={{
+                                      width: 'auto',
+                                      minWidth: '150px',
+                                      marginTop: '12px',
+                                      borderColor: item.ativo ? '#dc5555' : '#ffd400',
+                                      color: item.ativo ? '#ff7777' : '#111',
+                                    }}
+                                  >
+                                    {alterandoStatusId === item.id
+                                      ? 'Processando...'
+                                      : item.ativo
+                                        ? '⏸ Suspender conta'
+                                        : '▶ Ativar conta'}
+                                  </button>
+                                )}
+                            </span>
+                          </article>
+                        )
+                      })
+                    )}
                   </section>
                 </>
               )
@@ -1685,7 +2083,6 @@ function App() {
                     <span><small>Perfil de acesso</small>{nomePerfil}</span>
                   </div>
                 </section>
-
               </>
             )}
 
