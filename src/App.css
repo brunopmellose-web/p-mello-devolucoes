@@ -1148,342 +1148,123 @@ footer {
     animation-duration: .01ms !important;
   }
 }
-/* =========================================================
-   FILTROS — GESTÃO DE USUÁRIOS
-   ========================================================= */
 
-.filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(150px, 0.8fr));
-  gap: 12px;
-  width: 100%;
-  margin: 20px 0 24px;
-  padding: 15px;
-  background: #13171c;
-  border: 1px solid var(--pm-border);
-  border-radius: 13px;
-}
-
-.filters input,
-.filters select {
-  width: 100%;
-  min-width: 0;
-  height: 43px;
-  margin: 0;
-  padding: 0 13px;
-  color: var(--pm-white);
-  background: #0c1015;
-  border: 1px solid #343d49;
-  border-radius: 9px;
-  font-size: 12px;
-  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
-}
-
-.filters input::placeholder {
-  color: #788391;
-}
-
-.filters input:hover,
-.filters select:hover {
-  border-color: #68717d;
-}
-
-.filters input:focus,
-.filters select:focus {
-  border-color: var(--pm-yellow);
-  background: #10151b;
-  box-shadow: 0 0 0 3px rgba(255, 212, 0, .09);
-  outline: none;
-}
-
-.filters select {
-  cursor: pointer;
-  color-scheme: dark;
-}
-
-.filters select option {
-  color: var(--pm-white);
-  background: #151a20;
-}
-
-/* Responsividade dos filtros */
-
-@media (max-width: 700px) {
-  .filters {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  .filters input,
-  .filters select {
-    height: 45px;
-  }
-}
 
 /* =========================================================
-   CENTRAL E HISTÓRICO DE DEVOLUÇÕES
+   PADRÃO GLOBAL P. MELLO — LOGO E LISTAS SUSPENSAS
    ========================================================= */
 
-/* Filtros do histórico */
-.history-filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, 1fr));
-  gap: 11px;
-  margin: 20px 0;
-  padding: 15px;
-  background: #13171c;
-  border: 1px solid var(--pm-border);
-  border-radius: 13px;
-}
-
-.history-filters input,
-.history-filters select {
-  width: 100%;
-  min-width: 0;
-  height: 43px;
-  margin: 0;
-  padding: 0 12px;
-  color: var(--pm-white);
-  background: #0c1015;
-  border: 1px solid #343d49;
-  border-radius: 9px;
-  font-size: 12px;
-}
-
-.history-filters input:focus,
-.history-filters select:focus {
-  border-color: var(--pm-yellow);
-  box-shadow: 0 0 0 3px rgba(255, 212, 0, .08);
-  outline: none;
-}
-
-.history-filters select {
-  color-scheme: dark;
-  cursor: pointer;
-}
-
-/* Cartões de devolução */
-.return-detail-card {
-  position: relative;
-  margin: 12px 0;
-  padding: 19px;
-  overflow: hidden;
-  background: linear-gradient(145deg, #1b2027, #151a20);
-  border: 1px solid #303945;
-  border-left: 3px solid var(--pm-yellow);
-  border-radius: 12px;
-  transition: background .2s ease, border-color .2s ease, transform .2s ease;
-}
-
-.return-detail-card:has(.return-status.received) {
-  border-left-color: var(--pm-green);
-}
-
-.return-detail-card:hover {
-  background: #20262e;
-  border-top-color: #46515f;
-  border-right-color: #46515f;
-  border-bottom-color: #46515f;
-  transform: translateY(-1px);
-}
-
-.return-detail-heading {
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.return-detail-heading > strong {
-  font-size: 14px;
-  letter-spacing: .4px;
-}
-
-.return-detail-grid {
-  gap: 17px 22px;
-  padding: 15px;
-  background: rgba(8, 11, 15, .35);
-  border: 1px solid #29313b;
-  border-radius: 9px;
-}
-
-.return-detail-grid > span {
-  line-height: 1.5;
-}
-
-.return-detail-grid small {
-  color: #8995a3;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .5px;
-  text-transform: uppercase;
-}
-
-.return-status {
-  padding: 8px 11px;
-  font-size: 10px;
-  letter-spacing: .2px;
-}
-
-.return-detail-card .login-button {
-  width: auto;
-  min-width: 230px;
-  margin-top: 15px;
-}
-
-.return-detail-card .notice {
-  margin: 13px 0 0;
-  padding: 11px 13px;
-  background: rgba(255, 255, 255, .025);
-  border-radius: 8px;
-  font-size: 11px;
-}
-
-/* Cartões de usuários e solicitações */
-.action-card {
-  align-items: flex-start;
-  margin: 12px 0;
-  padding: 19px;
-  background: linear-gradient(145deg, #1b2027, #151a20);
-  border: 1px solid #303945;
-  border-radius: 12px;
-  transition: background .2s ease, border-color .2s ease, transform .2s ease;
-}
-
-.action-card:hover {
-  background: #20262e;
-  border-color: #46515f;
-  transform: translateY(-1px);
-}
-
-.action-icon {
-  flex-shrink: 0;
-}
-
-.action-text {
+.brand-logo {
   display: block;
-  min-width: 0;
+  width: 66px;
+  height: 54px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  object-position: center;
 }
 
-.action-text strong {
-  margin: 2px 0 9px;
-  font-size: 13px;
+.sidebar-brand .brand-logo {
+  width: 62px;
+  height: 52px;
 }
 
-.action-text small {
-  margin-bottom: 7px;
-  line-height: 1.5;
-}
-
-.action-text select {
-  max-width: 350px;
-}
-
-/* Cabeçalho das listas */
-.content-panel .panel-heading {
-  padding-bottom: 15px;
-  border-bottom: 1px solid #2b323c;
-}
-
-.content-panel .panel-heading .notice {
-  margin: 0;
-  white-space: nowrap;
-}
-
-/* Ajustes para celular e tablet */
-@media (max-width: 900px) {
-  .history-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .history-filters input {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 600px) {
-  .history-filters {
-    grid-template-columns: 1fr;
-    padding: 12px;
-  }
-
-  .history-filters input {
-    grid-column: auto;
-  }
-
-  .return-detail-card {
-    padding: 15px;
-  }
-
-  .return-detail-heading {
-    align-items: flex-start;
-  }
-
-  .return-detail-grid {
-    grid-template-columns: 1fr;
-    gap: 13px;
-  }
-
-  .return-detail-card .login-button {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .action-card {
-    padding: 14px;
-  }
-
-  .action-text .login-button {
-    max-width: 100%;
-  }
-}
-
-/* Filtros da gestão de usuários */
-.filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(160px, 1fr));
-  gap: 12px;
-  margin: 20px 0;
-  padding: 16px;
-  background: #13171c;
-  border: 1px solid var(--pm-border);
-  border-radius: 13px;
-}
-
-.filters input,
-.filters select {
+/* Todas as listas suspensas usam o mesmo padrão visual. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
-  min-width: 0;
-  height: 44px;
-  margin: 0;
-  padding: 0 13px;
-  color: var(--pm-white);
-  background: #0c1015;
-  border: 1px solid #343d49;
-  border-radius: 9px;
-  font-size: 12px;
-}
-
-.filters input:focus,
-.filters select:focus {
-  border-color: var(--pm-yellow);
-  box-shadow: 0 0 0 3px rgba(255, 212, 0, .08);
-  outline: none;
-}
-
-.filters select,
-.history-filters select {
-  color-scheme: dark;
-  cursor: pointer;
-}
-
-.filters select option,
-.history-filters select option {
+  min-height: 46px;
+  padding: 11px 42px 11px 14px;
   color: #f5f5f5;
-  background: #15181d;
+  background-color: #11151a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffd400' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  border: 1px solid #3a424d;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
 }
 
-@media (max-width: 700px) {
-  .filters {
-    grid-template-columns: 1fr;
-  }
+select:hover {
+  background-color: #171c22;
+  border-color: rgba(255, 212, 0, .55);
+}
+
+select:focus,
+select:focus-visible {
+  outline: none;
+  border-color: var(--pm-yellow);
+  box-shadow: 0 0 0 3px rgba(255, 212, 0, .12);
+}
+
+select:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+select option {
+  color: #f5f5f5;
+  background: #151a20;
+  font-weight: 500;
+}
+
+select option:checked {
+  color: #111;
+  background: #ffd400;
+}
+
+/* Mantém o mesmo padrão nos campos de login, formulários e cards. */
+.login-panel select,
+.form-panel select,
+.action-text select {
+  min-height: 48px;
+  padding: 11px 42px 11px 14px;
+  border-radius: 11px;
+}
+/* =========================================================
+   CAMPO DE PESQUISA DO HISTÓRICO — PADRÃO P. MELLO
+   ========================================================= */
+
+.content-panel input[type="text"],
+.content-panel input[type="search"] {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  min-height: 46px;
+  margin: 0 auto 12px;
+  padding: 11px 14px;
+  color: var(--pm-white);
+  background: #11151a;
+  border: 1px solid #3a424d;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+.content-panel input[type="text"]::placeholder,
+.content-panel input[type="search"]::placeholder {
+  color: #7f8996;
+  opacity: 1;
+}
+
+.content-panel input[type="text"]:hover,
+.content-panel input[type="search"]:hover {
+  background: #171c22;
+  border-color: rgba(255, 212, 0, .55);
+}
+
+.content-panel input[type="text"]:focus,
+.content-panel input[type="text"]:focus-visible,
+.content-panel input[type="search"]:focus,
+.content-panel input[type="search"]:focus-visible {
+  outline: none;
+  border-color: var(--pm-yellow);
+  box-shadow: 0 0 0 3px rgba(255, 212, 0, .12);
 }

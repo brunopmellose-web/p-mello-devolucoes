@@ -17,7 +17,6 @@ const formatarData = (data) => {
   return new Date(data).toLocaleString('pt-BR')
 }
 
-// DISTRIBUIÇÃO DE DEVOLUÇÕES POR CIDADE
 function DistribuicaoCidades({ dados }) {
   const maiorVolume = Math.max(1, ...dados.map((item) => item.total))
 
@@ -39,7 +38,6 @@ function DistribuicaoCidades({ dados }) {
               }}
             >
               <strong style={{ fontSize: '14px' }}>{item.nome}</strong>
-
               <strong style={{ fontSize: '15px', color: '#ffd400' }}>
                 {item.total} devoluções
               </strong>
@@ -88,15 +86,11 @@ function DistribuicaoCidades({ dados }) {
               }}
             >
               <span>
-                <span style={{ color: '#22c55e' }}>●</span>
-                {' '}{item.recebidas} recebidas
+                <span style={{ color: '#22c55e' }}>●</span> {item.recebidas} recebidas
               </span>
-
               <span>
-                <span style={{ color: '#ffd400' }}>●</span>
-                {' '}{item.pendentes} pendentes
+                <span style={{ color: '#ffd400' }}>●</span> {item.pendentes} pendentes
               </span>
-
               <strong style={{ color: '#fff' }}>
                 {item.percentual}% concluído
               </strong>
@@ -108,7 +102,6 @@ function DistribuicaoCidades({ dados }) {
   )
 }
 
-// DISTRIBUIÇÃO DE DEVOLUÇÕES POR MOTIVO
 function DistribuicaoMotivos({ dados }) {
   const maiorVolume = Math.max(1, ...dados.map((item) => item[1]))
 
@@ -147,24 +140,10 @@ function DistribuicaoMotivos({ dados }) {
                   flexWrap: 'wrap',
                 }}
               >
-                <span
-                  style={{
-                    color: '#f5f5f5',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    textAlign: 'left',
-                  }}
-                >
+                <span style={{ color: '#f5f5f5', fontSize: '14px', fontWeight: 500 }}>
                   {nomeMotivo}
                 </span>
-
-                <strong
-                  style={{
-                    color: '#ffd400',
-                    fontSize: '15px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <strong style={{ color: '#ffd400', fontSize: '15px' }}>
                   {quantidade} {quantidade === 1 ? 'devolução' : 'devoluções'}
                 </strong>
               </div>
@@ -182,21 +161,14 @@ function DistribuicaoMotivos({ dados }) {
                   style={{
                     width: `${percentual}%`,
                     height: '100%',
-                    background:
-                      'linear-gradient(90deg, #d6a900 0%, #ffd400 100%)',
+                    background: 'linear-gradient(90deg, #d6a900 0%, #ffd400 100%)',
                     borderRadius: '20px',
                     transition: 'width 0.4s ease',
                   }}
                 />
               </div>
 
-              <span
-                style={{
-                  color: '#999',
-                  fontSize: '12px',
-                  textAlign: 'right',
-                }}
-              >
+              <span style={{ color: '#999', fontSize: '12px', textAlign: 'right' }}>
                 {Math.round(percentual)}% do maior volume
               </span>
             </div>
@@ -234,33 +206,33 @@ function App() {
   const [alterandoStatusId, setAlterandoStatusId] = useState(null)
   const [contaSuspensa, setContaSuspensa] = useState(false)
 
+  // CAMPOS DO PACOTE QUE ESTÁ SENDO ADICIONADO À TAREFA
   const [codigo, setCodigo] = useState('')
-  const [cidadeId, setCidadeId] = useState('')
   const [motivo, setMotivo] = useState('')
   const [detalhes, setDetalhes] = useState('')
+
+  // PACOTES QUE FORMARÃO A TAREFA
+  const [pacotesTarefa, setPacotesTarefa] = useState([])
+
   const [senhaNova, setSenhaNova] = useState('')
   const [sessaoRecuperacao, setSessaoRecuperacao] = useState(false)
   const [paginaAtiva, setPaginaAtiva] = useState('inicio')
 
-  // FILTROS DO HISTÓRICO
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroCidade, setFiltroCidade] = useState('todas')
   const [filtroMotivo, setFiltroMotivo] = useState('todos')
 
-  // FILTROS EXCLUSIVOS DA CENTRAL DE DEVOLUÇÕES
   const [buscaCentral, setBuscaCentral] = useState('')
   const [filtroCidadeCentral, setFiltroCidadeCentral] = useState('todas')
   const [filtroMotivoCentral, setFiltroMotivoCentral] = useState('todos')
 
-  // CONTROLE DA CÂMERA E DO LEITOR DE CÓDIGO
   const [cameraAtiva, setCameraAtiva] = useState(false)
   const videoRef = useRef(null)
   const leitorRef = useRef(null)
   const controlesCameraRef = useRef(null)
   const iniciandoCameraRef = useRef(false)
 
-  // ENCERRA A CÂMERA E LIBERA O DISPOSITIVO
   const pararCamera = useCallback(() => {
     try {
       controlesCameraRef.current?.stop()
@@ -281,7 +253,6 @@ function App() {
     setCameraAtiva(false)
   }, [])
 
-  // SOLICITA PERMISSÃO E INICIA A LEITURA
   async function iniciarCamera() {
     if (iniciandoCameraRef.current || cameraAtiva) return
 
@@ -296,7 +267,6 @@ function App() {
     }
 
     iniciandoCameraRef.current = true
-
     let stream = null
 
     try {
@@ -319,36 +289,27 @@ function App() {
       }
 
       setCameraAtiva(true)
-
       await new Promise((resolve) => requestAnimationFrame(resolve))
 
       video.srcObject = stream
       video.muted = true
       video.playsInline = true
-
       await video.play()
 
       const leitor = new BrowserMultiFormatReader()
       leitorRef.current = leitor
 
-      const controles = await leitor.decodeFromStream(
-        stream,
-        video,
-        (resultado) => {
-          if (!resultado) return
+      const controles = await leitor.decodeFromStream(stream, video, (resultado) => {
+        if (!resultado) return
 
-          const codigoLido = resultado.getText().trim()
+        const codigoLido = resultado.getText().trim()
 
-          if (codigoLido) {
-            setCodigo(codigoLido)
-            setSucesso(
-              'Código lido com sucesso! Confira os dados antes de registrar.'
-            )
-
-            pararCamera()
-          }
+        if (codigoLido) {
+          setCodigo(codigoLido)
+          setSucesso('Código lido com sucesso! Confira os dados antes de adicionar.')
+          pararCamera()
         }
-      )
+      })
 
       controlesCameraRef.current = controles
       iniciandoCameraRef.current = false
@@ -364,19 +325,13 @@ function App() {
         erroCamera?.name === 'PermissionDeniedError' ||
         erroCamera?.name === 'SecurityError'
       ) {
-        setErro(
-          'Permissão da câmera bloqueada. Autorize o acesso à câmera nas configurações do navegador e tente novamente.'
-        )
+        setErro('Permissão da câmera bloqueada. Autorize o acesso nas configurações do navegador.')
       } else if (erroCamera?.name === 'NotFoundError') {
         setErro('Nenhuma câmera foi encontrada neste celular.')
       } else if (erroCamera?.name === 'NotReadableError') {
-        setErro(
-          'A câmera está sendo utilizada por outro aplicativo. Feche os outros aplicativos que usam a câmera e tente novamente.'
-        )
+        setErro('A câmera está sendo utilizada por outro aplicativo.')
       } else {
-        setErro(
-          'Não foi possível iniciar a câmera. Verifique as permissões do celular e tente novamente.'
-        )
+        setErro('Não foi possível iniciar a câmera. Verifique as permissões e tente novamente.')
       }
     } finally {
       iniciandoCameraRef.current = false
@@ -415,7 +370,7 @@ function App() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('nome, perfil, ativo')
+      .select('nome, perfil, ativo, cidade_id')
       .eq('id', sessao.user.id)
       .maybeSingle()
 
@@ -436,7 +391,7 @@ function App() {
     if (!data.ativo) {
       setContaSuspensa(true)
       setPerfil(null)
-      setErro('Sua conta está sem acesso ativo. Se você acabou de se cadastrar, aguarde a aprovação; caso contrário, procure a equipe responsável.')
+      setErro('Sua conta está sem acesso ativo. Aguarde a aprovação ou procure a equipe responsável.')
       return
     }
 
@@ -458,13 +413,14 @@ function App() {
         status,
         criado_em,
         recebido_por,
-        recebido_em
+        recebido_em,
+        tarefa_id
       `)
       .order('criado_em', { ascending: false })
       .limit(200)
 
     if (error) {
-      setErro('Não foi possível carregar as devoluções. Verifique as permissões do banco.')
+      setErro(`Não foi possível carregar as devoluções: ${error.message}`)
       return
     }
 
@@ -487,7 +443,7 @@ function App() {
 
     if (erroPerfis) {
       setNomesEntregadores({})
-      setErro('As devoluções foram carregadas, mas não foi possível consultar os nomes dos entregadores. Confira as permissões de leitura dos perfis.')
+      setErro('As devoluções foram carregadas, mas não foi possível consultar os nomes dos entregadores.')
       return
     }
 
@@ -555,7 +511,7 @@ function App() {
       )
 
       if (error) {
-        setErro('Não foi possível confirmar o recebimento. Confira se o pacote continua pendente e se seu perfil tem permissão.')
+        setErro(`Não foi possível confirmar o recebimento: ${error.message}`)
         return
       }
 
@@ -575,7 +531,6 @@ function App() {
       const { data, error } = await supabase.auth.getSession()
 
       if (!ativo) return
-
       if (error) setErro('Não foi possível verificar a sessão.')
 
       if (data.session) {
@@ -587,18 +542,16 @@ function App() {
 
     iniciar()
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (evento, sessao) => {
-        if (evento === 'PASSWORD_RECOVERY') {
-          setSessaoRecuperacao(true)
-          setModo('redefinir')
-        }
-
-        Promise.resolve().then(() => {
-          if (ativo) carregarPerfil(sessao)
-        })
+    const { data: listener } = supabase.auth.onAuthStateChange((evento, sessao) => {
+      if (evento === 'PASSWORD_RECOVERY') {
+        setSessaoRecuperacao(true)
+        setModo('redefinir')
       }
-    )
+
+      Promise.resolve().then(() => {
+        if (ativo) carregarPerfil(sessao)
+      })
+    })
 
     return () => {
       ativo = false
@@ -697,7 +650,7 @@ function App() {
     setSenha('')
     setNome('')
     setModo('login')
-    setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação da equipe responsável.')
+    setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação.')
   }
 
   async function recuperarSenha(evento) {
@@ -712,10 +665,9 @@ function App() {
 
     setEnviando(true)
 
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      email.trim(),
-      { redirectTo: window.location.origin }
-    )
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    })
 
     setEnviando(false)
 
@@ -776,6 +728,7 @@ function App() {
       setPaginaAtiva('inicio')
       setErro('')
       setSucesso('')
+      setPacotesTarefa([])
     }
   }
 
@@ -803,6 +756,7 @@ function App() {
       delete atualizado[id]
       return atualizado
     })
+
     setSucesso('Cadastro aprovado com sucesso.')
     await carregarPendentes()
     await carregarUsuarios()
@@ -834,6 +788,7 @@ function App() {
         delete atualizado[id]
         return atualizado
       })
+
       setSucesso('Cadastro rejeitado e conta excluída com sucesso.')
       await carregarPendentes()
       await carregarUsuarios()
@@ -851,7 +806,7 @@ function App() {
     const confirmar = window.confirm(
       novoStatus
         ? `Deseja reativar a conta de ${item.nome || 'este usuário'}?`
-        : `Deseja suspender a conta de ${item.nome || 'este usuário'}? O acesso será bloqueado, mas o histórico operacional será mantido.`
+        : `Deseja suspender a conta de ${item.nome || 'este usuário'}? O histórico operacional será mantido.`
     )
 
     if (!confirmar) return
@@ -871,12 +826,7 @@ function App() {
         return
       }
 
-      setSucesso(
-        novoStatus
-          ? 'Conta reativada com sucesso!'
-          : 'Conta suspensa com sucesso!'
-      )
-
+      setSucesso(novoStatus ? 'Conta reativada com sucesso!' : 'Conta suspensa com sucesso!')
       await carregarUsuarios()
     } catch {
       setErro(`Ocorreu um erro ao ${acao} esta conta.`)
@@ -885,13 +835,13 @@ function App() {
     }
   }
 
-  async function registrarDevolucao(evento) {
-    evento.preventDefault()
+  // ADICIONA UM PACOTE À LISTA DA TAREFA
+  function adicionarPacoteTarefa() {
     setErro('')
     setSucesso('')
 
-    if (!codigo.trim() || !cidadeId || !motivo) {
-      setErro('Preencha o código, a cidade e o motivo.')
+    if (!codigo.trim() || !motivo) {
+      setErro('Informe o código de rastreio e o motivo do pacote.')
       return
     }
 
@@ -900,34 +850,140 @@ function App() {
       return
     }
 
-    setEnviando(true)
+    const codigoNormalizado = codigo.trim()
 
-    const { error } = await supabase.from('returns').insert({
-      codigo_rastreio: codigo.trim(),
-      cidade_id: cidadeId,
-      motivo,
-      detalhes_motivo: motivo === 'Outro' ? detalhes.trim() : null,
-      entregador_id: usuario.id,
-    })
+    const jaExisteNaLista = pacotesTarefa.some(
+      (item) => item.codigo_rastreio.toLowerCase() === codigoNormalizado.toLowerCase()
+    )
 
-    setEnviando(false)
+    const jaExisteNoHistorico = devolucoes.some(
+      (item) => item.codigo_rastreio.toLowerCase() === codigoNormalizado.toLowerCase()
+    )
 
-    if (error) {
-      setErro(
-        error.code === '23505'
-          ? 'Este código de rastreio já foi registrado.'
-          : 'Não foi possível registrar. Verifique as permissões e tente novamente.'
-      )
+    if (jaExisteNaLista || jaExisteNoHistorico) {
+      setErro('Este código de rastreio já foi adicionado ou já está registrado no sistema.')
       return
     }
 
+    setPacotesTarefa((anterior) => [
+      ...anterior,
+      {
+        codigo_rastreio: codigoNormalizado,
+        motivo,
+        detalhes_motivo: motivo === 'Outro' ? detalhes.trim() : null,
+      },
+    ])
+
     setCodigo('')
-    setCidadeId('')
     setMotivo('')
     setDetalhes('')
-    setSucesso('Devolução registrada! Aguarde a conferência física pela base.')
+    setSucesso('Pacote adicionado à tarefa. Você pode incluir outros pacotes.')
+  }
 
-    await carregarDevolucoes()
+  function removerPacoteTarefa(indice) {
+    setPacotesTarefa((anterior) => anterior.filter((_, index) => index !== indice))
+    setSucesso('Pacote removido da lista.')
+    setErro('')
+  }
+
+  // CRIA UMA TAREFA COM TODOS OS PACOTES ADICIONADOS
+  async function registrarDevolucao(evento) {
+    evento.preventDefault()
+    setErro('')
+    setSucesso('')
+
+    if (!perfil?.cidade_id) {
+      setErro('Seu usuário ainda não possui uma cidade vinculada. Solicite ao administrador que configure sua cidade no cadastro.')
+      return
+    }
+
+    let pacotesParaEnviar = [...pacotesTarefa]
+
+    // Se houver um pacote preenchido no formulário, ele também entra na tarefa.
+    if (codigo.trim() || motivo || detalhes.trim()) {
+      if (!codigo.trim() || !motivo) {
+        setErro('Complete o código e o motivo do pacote atual ou adicione-o à lista antes de criar a tarefa.')
+        return
+      }
+
+      if (motivo === 'Outro' && !detalhes.trim()) {
+        setErro('Explique o motivo da devolução.')
+        return
+      }
+
+      const codigoNormalizado = codigo.trim()
+
+      const duplicadoNaLista = pacotesParaEnviar.some(
+        (item) => item.codigo_rastreio.toLowerCase() === codigoNormalizado.toLowerCase()
+      )
+
+      const duplicadoNoHistorico = devolucoes.some(
+        (item) => item.codigo_rastreio.toLowerCase() === codigoNormalizado.toLowerCase()
+      )
+
+      if (duplicadoNaLista || duplicadoNoHistorico) {
+        setErro('Este código de rastreio já foi adicionado ou já está registrado no sistema.')
+        return
+      }
+
+      pacotesParaEnviar.push({
+        codigo_rastreio: codigoNormalizado,
+        motivo,
+        detalhes_motivo: motivo === 'Outro' ? detalhes.trim() : null,
+      })
+    }
+
+    if (pacotesParaEnviar.length === 0) {
+      setErro('Adicione pelo menos um pacote antes de criar a tarefa.')
+      return
+    }
+
+    const codigos = pacotesParaEnviar.map((item) =>
+      item.codigo_rastreio.toLowerCase()
+    )
+
+    if (new Set(codigos).size !== codigos.length) {
+      setErro('Existem códigos repetidos na lista. Revise os pacotes antes de continuar.')
+      return
+    }
+
+    const confirmar = window.confirm(
+      `Confirma a criação de uma tarefa com ${pacotesParaEnviar.length} pacote(s)?`
+    )
+
+    if (!confirmar) return
+
+    setEnviando(true)
+
+    try {
+      const { data, error } = await supabase.rpc('criar_tarefa_devolucao', {
+        p_pacotes: pacotesParaEnviar,
+      })
+
+      if (error) {
+        if (error.code === '23505') {
+          setErro('Um ou mais códigos de rastreio já estão cadastrados. Confira os pacotes.')
+        } else {
+          setErro(`Não foi possível criar a tarefa: ${error.message}`)
+        }
+        return
+      }
+
+      setPacotesTarefa([])
+      setCodigo('')
+      setMotivo('')
+      setDetalhes('')
+
+      setSucesso(
+        `Tarefa criada com sucesso! ${pacotesParaEnviar.length} pacote(s) registrado(s). Identificador: ${String(data).slice(0, 8).toUpperCase()}`
+      )
+
+      await carregarDevolucoes()
+    } catch (erroRegistro) {
+      setErro(`Ocorreu um erro ao criar a tarefa: ${erroRegistro.message || 'Tente novamente.'}`)
+    } finally {
+      setEnviando(false)
+    }
   }
 
   const nomesCidades = useMemo(
@@ -945,7 +1001,6 @@ function App() {
     (item) => item.status === 'recebido'
   ).length
 
-  // FILTROS DO HISTÓRICO — PESQUISA NORMALIZADA
   const devolucoesFiltradas = useMemo(() => {
     const normalizar = (valor) =>
       String(valor ?? '')
@@ -957,17 +1012,18 @@ function App() {
     const termo = normalizar(busca)
 
     return devolucoes.filter((item) => {
-      const codigo = normalizar(item.codigo_rastreio)
+      const codigoItem = normalizar(item.codigo_rastreio)
       const entregador = normalizar(nomesEntregadores[item.entregador_id])
       const cidade = normalizar(nomesCidades[item.cidade_id])
       const motivoItem = normalizar(item.motivo)
 
       const correspondeBusca =
         !termo ||
-        codigo.includes(termo) ||
+        codigoItem.includes(termo) ||
         entregador.includes(termo) ||
         cidade.includes(termo) ||
-        motivoItem.includes(termo)
+        motivoItem.includes(termo) ||
+        String(item.tarefa_id || '').toLowerCase().includes(termo)
 
       const correspondeStatus =
         filtroStatus === 'todos' ||
@@ -999,7 +1055,6 @@ function App() {
     nomesCidades,
   ])
 
-  // FILTROS EXCLUSIVOS DA CENTRAL — SOMENTE DEVOLUÇÕES PENDENTES
   const devolucoesCentralFiltradas = useMemo(() => {
     const normalizar = (valor) =>
       String(valor ?? '')
@@ -1013,17 +1068,18 @@ function App() {
     return devolucoes.filter((item) => {
       if (item.status === 'recebido') return false
 
-      const codigo = normalizar(item.codigo_rastreio)
+      const codigoItem = normalizar(item.codigo_rastreio)
       const entregador = normalizar(nomesEntregadores[item.entregador_id])
       const cidade = normalizar(nomesCidades[item.cidade_id])
       const motivoItem = normalizar(item.motivo)
 
       const correspondeBusca =
         !termo ||
-        codigo.includes(termo) ||
+        codigoItem.includes(termo) ||
         entregador.includes(termo) ||
         cidade.includes(termo) ||
-        motivoItem.includes(termo)
+        motivoItem.includes(termo) ||
+        String(item.tarefa_id || '').toLowerCase().includes(termo)
 
       const correspondeCidade =
         filtroCidadeCentral === 'todas' ||
@@ -1044,7 +1100,6 @@ function App() {
     nomesCidades,
   ])
 
-  // INDICADORES DE DEVOLUÇÕES POR CIDADE
   const dadosPorCidade = useMemo(() => {
     const contagem = {}
 
@@ -1093,7 +1148,6 @@ function App() {
       .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome))
   }, [devolucoes, cidades])
 
-  // INDICADORES DE DEVOLUÇÕES POR MOTIVO
   const dadosPorMotivo = useMemo(() => {
     const contagem = {}
 
@@ -1118,7 +1172,7 @@ function App() {
       <main className="app">
         <header className="topbar">
           <div className="brand">
-            <div className="brand-mark">PM</div>
+            <img className="brand-logo" src="/logo-pmello.png" alt="P. MELLO Transportes" />
             <div>
               <h1>P. MELLO</h1>
               <span>TRANSPORTES</span>
@@ -1164,7 +1218,7 @@ function App() {
       <main className="app">
         <header className="topbar">
           <div className="brand">
-            <div className="brand-mark">PM</div>
+            <img className="brand-logo" src="/logo-pmello.png" alt="P. MELLO Transportes" />
             <div>
               <h1>P. MELLO</h1>
               <span>TRANSPORTES</span>
@@ -1210,7 +1264,7 @@ function App() {
     const menu = [
       { id: 'inicio', titulo: 'Visão geral', icone: '⌂' },
       ...(podeRegistrar
-        ? [{ id: 'registrar', titulo: 'Registrar devolução', icone: '+' }]
+        ? [{ id: 'registrar', titulo: 'Criar tarefa de devolução', icone: '+' }]
         : []),
       ...(podeConferir
         ? [
@@ -1239,11 +1293,15 @@ function App() {
     const listaExibida =
       paginaAtual === 'central' ? listaCentral : listaHistorico
 
+    const cidadeDoEntregador = cidades.find(
+      (cidade) => String(cidade.id) === String(perfil.cidade_id)
+    )
+
     return (
       <main className="dashboard">
         <aside className="sidebar">
           <div className="sidebar-brand">
-            <div className="brand-mark">PM</div>
+            <img className="brand-logo" src="/logo-pmello.png" alt="P. MELLO Transportes" />
             <div>
               <h1>P. MELLO</h1>
               <span>TRANSPORTES</span>
@@ -1315,7 +1373,11 @@ function App() {
                 <section className="dashboard-heading">
                   <div>
                     <span className="eyebrow">
-                      {ehAdmin ? 'PAINEL DE GESTÃO' : podeConferir ? 'PAINEL DA BASE' : 'PAINEL DO ENTREGADOR'}
+                      {ehAdmin
+                        ? 'PAINEL DE GESTÃO'
+                        : podeConferir
+                          ? 'PAINEL DA BASE'
+                          : 'PAINEL DO ENTREGADOR'}
                     </span>
                     <h3>Olá, {perfil.nome}!</h3>
                     <p>
@@ -1370,12 +1432,9 @@ function App() {
                     <div className="panel-heading">
                       <div>
                         <h3>Distribuição por cidade</h3>
-                        <p>
-                          Volume, recebimentos e pendências de cada cidade.
-                        </p>
+                        <p>Volume, recebimentos e pendências de cada cidade.</p>
                       </div>
                     </div>
-
                     <DistribuicaoCidades dados={dadosPorCidade} />
                   </section>
                 )}
@@ -1407,6 +1466,11 @@ function App() {
                             {' · '}
                             {item.motivo}
                           </span>
+                          {item.tarefa_id && (
+                            <small>
+                              Tarefa: {String(item.tarefa_id).slice(0, 8).toUpperCase()}
+                            </small>
+                          )}
                         </div>
                         <span className={`return-status ${item.status === 'recebido' ? 'received' : 'pending'}`}>
                           {item.status === 'recebido' ? 'Recebido' : 'Pendente'}
@@ -1485,21 +1549,41 @@ function App() {
               <section className="content-panel form-panel">
                 <div className="panel-heading">
                   <div>
-                    <h3>Registrar devolução</h3>
-                    <p>Informe os dados do pacote para registrar a devolução.</p>
+                    <h3>Criar tarefa de devolução</h3>
+                    <p>
+                      Adicione todos os pacotes que serão entregues à base em uma única tarefa.
+                    </p>
                   </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#202020',
+                    border: '1px solid #383838',
+                    borderRadius: '12px',
+                    padding: '15px',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <small style={{ color: '#aaa' }}>Cidade vinculada ao seu cadastro</small>
+                  <strong style={{ display: 'block', color: '#ffd400', marginTop: '5px' }}>
+                    {cidadeDoEntregador?.nome || 'Cidade não vinculada'}
+                  </strong>
+                  {!perfil.cidade_id && (
+                    <p className="error-message">
+                      Seu cadastro ainda não possui cidade vinculada. Peça ao administrador para configurar seu perfil.
+                    </p>
+                  )}
                 </div>
 
                 <form onSubmit={registrarDevolucao}>
                   <label htmlFor="codigo">Código de rastreio</label>
-
                   <input
                     id="codigo"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value)}
                     placeholder="Digite ou escaneie o código"
                     autoComplete="off"
-                    required
                   />
 
                   <button
@@ -1542,7 +1626,6 @@ function App() {
                         display: 'block',
                       }}
                     />
-
                     <p
                       style={{
                         color: '#ffd400',
@@ -1556,27 +1639,11 @@ function App() {
                     </p>
                   </div>
 
-                  <label htmlFor="cidade">Cidade</label>
-                  <select
-                    id="cidade"
-                    value={cidadeId}
-                    onChange={(e) => setCidadeId(e.target.value)}
-                    required
-                  >
-                    <option value="">Selecione a cidade</option>
-                    {cidades.map((cidade) => (
-                      <option key={cidade.id} value={cidade.id}>
-                        {cidade.nome}
-                      </option>
-                    ))}
-                  </select>
-
                   <label htmlFor="motivo">Motivo da devolução</label>
                   <select
                     id="motivo"
                     value={motivo}
                     onChange={(e) => setMotivo(e.target.value)}
-                    required
                   >
                     <option value="">Selecione o motivo</option>
                     {motivos.map((item) => (
@@ -1592,13 +1659,102 @@ function App() {
                         value={detalhes}
                         onChange={(e) => setDetalhes(e.target.value)}
                         placeholder="Explique o motivo da devolução"
-                        required
                       />
                     </>
                   )}
 
-                  <button className="login-button" type="submit" disabled={enviando}>
-                    {enviando ? 'Registrando...' : 'Registrar devolução'}
+                  <button
+                    type="button"
+                    className="refresh-button"
+                    onClick={adicionarPacoteTarefa}
+                    disabled={enviando}
+                    style={{ width: '100%', marginTop: '12px' }}
+                  >
+                    + Adicionar pacote à tarefa
+                  </button>
+
+                  <section
+                    style={{
+                      marginTop: '25px',
+                      padding: '16px',
+                      border: '1px solid #383838',
+                      borderRadius: '12px',
+                      background: '#171717',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '10px',
+                        flexWrap: 'wrap',
+                        marginBottom: '15px',
+                      }}
+                    >
+                      <strong>Pacotes adicionados</strong>
+                      <span className="count-pill">
+                        {pacotesTarefa.length} pacote(s)
+                      </span>
+                    </div>
+
+                    {pacotesTarefa.length === 0 ? (
+                      <p className="notice">
+                        Nenhum pacote adicionado. Informe o código e o motivo acima.
+                      </p>
+                    ) : (
+                      pacotesTarefa.map((item, index) => (
+                        <article
+                          key={`${item.codigo_rastreio}-${index}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px',
+                            marginBottom: '10px',
+                            background: '#252525',
+                            borderRadius: '9px',
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <strong style={{ display: 'block', overflowWrap: 'anywhere' }}>
+                              {item.codigo_rastreio}
+                            </strong>
+                            <small style={{ color: '#aaa' }}>{item.motivo}</small>
+                            {item.detalhes_motivo && (
+                              <small style={{ display: 'block', color: '#aaa' }}>
+                                {item.detalhes_motivo}
+                              </small>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="logout"
+                            onClick={() => removerPacoteTarefa(index)}
+                            disabled={enviando}
+                            style={{
+                              color: '#ff7777',
+                              borderColor: '#dc5555',
+                              flexShrink: 0,
+                            }}
+                          >
+                            Remover
+                          </button>
+                        </article>
+                      ))
+                    )}
+                  </section>
+
+                  <button
+                    className="login-button"
+                    type="submit"
+                    disabled={enviando || !perfil.cidade_id || pacotesTarefa.length === 0 && !codigo.trim()}
+                    style={{ marginTop: '18px' }}
+                  >
+                    {enviando
+                      ? 'Criando tarefa...'
+                      : `Criar tarefa (${pacotesTarefa.length + (codigo.trim() ? 1 : 0)} pacote(s))`}
                   </button>
                 </form>
               </section>
@@ -1629,7 +1785,7 @@ function App() {
                 <div className="history-filters">
                   <input
                     type="search"
-                    placeholder="Pesquisar código, entregador, cidade ou motivo..."
+                    placeholder="Pesquisar código, tarefa, entregador, cidade ou motivo..."
                     value={paginaAtual === 'central' ? buscaCentral : busca}
                     onChange={(e) =>
                       paginaAtual === 'central'
@@ -1683,9 +1839,7 @@ function App() {
                   >
                     <option value="todos">Todos os motivos</option>
                     {motivos.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
+                      <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
                 </div>
@@ -1700,9 +1854,33 @@ function App() {
                       <div className="return-detail-heading">
                         <strong>{item.codigo_rastreio}</strong>
                         <span className={`return-status ${item.status === 'recebido' ? 'received' : 'pending'}`}>
-                          {item.status === 'recebido' ? 'Recebido pela base' : 'Aguardando recebimento'}
+                          {item.status === 'recebido'
+                            ? 'Recebido pela base'
+                            : 'Aguardando recebimento'}
                         </span>
                       </div>
+
+                      {item.tarefa_id && (
+                        <div
+                          style={{
+                            background: '#292929',
+                            borderRadius: '8px',
+                            padding: '9px 12px',
+                            marginBottom: '12px',
+                          }}
+                        >
+                          <small style={{ color: '#aaa' }}>Tarefa vinculada</small>
+                          <strong
+                            style={{
+                              display: 'block',
+                              color: '#ffd400',
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
+                            {String(item.tarefa_id).slice(0, 8).toUpperCase()}
+                          </strong>
+                        </div>
+                      )}
 
                       <div className="return-detail-grid">
                         <span>
@@ -1734,7 +1912,9 @@ function App() {
                           disabled={recebendoId !== null}
                           onClick={() => confirmarRecebimento(item.id)}
                         >
-                          {recebendoId === item.id ? 'Confirmando...' : 'Confirmar recebimento físico'}
+                          {recebendoId === item.id
+                            ? 'Confirmando...'
+                            : 'Confirmar recebimento físico'}
                         </button>
                       )}
 
@@ -1790,26 +1970,19 @@ function App() {
                   <div className="panel-heading">
                     <div>
                       <h3>Devoluções por cidade</h3>
-                      <p>
-                        Comparativo de recebimentos e pendências por localidade.
-                      </p>
+                      <p>Comparativo de recebimentos e pendências por localidade.</p>
                     </div>
                   </div>
-
                   <DistribuicaoCidades dados={dadosPorCidade} />
                 </section>
 
-                {/* PAINEL ATUALIZADO DE DEVOLUÇÕES POR MOTIVO */}
                 <section className="content-panel">
                   <div className="panel-heading">
                     <div>
                       <h3>Devoluções por motivo</h3>
-                      <p>
-                        Distribuição dos principais motivos registrados pela equipe.
-                      </p>
+                      <p>Distribuição dos principais motivos registrados pela equipe.</p>
                     </div>
                   </div>
-
                   <DistribuicaoMotivos dados={dadosPorMotivo} />
                 </section>
 
@@ -1858,11 +2031,7 @@ function App() {
                   filtroSituacaoUsuario === 'todos' ||
                   situacao === filtroSituacaoUsuario
 
-                return (
-                  correspondeBusca &&
-                  correspondePerfil &&
-                  correspondeSituacao
-                )
+                return correspondeBusca && correspondePerfil && correspondeSituacao
               })
 
               return (
@@ -2038,31 +2207,29 @@ function App() {
                               <small>Situação: {situacao}</small>
                               <small>Cadastrado em: {formatarData(item.criado_em)}</small>
 
-                              {ehAdmin &&
-                                item.id !== usuario.id &&
-                                !pendente && (
-                                  <button
-                                    type="button"
-                                    className={item.ativo ? 'logout' : 'login-button'}
-                                    title={item.ativo ? 'Suspender conta' : 'Reativar conta'}
-                                    aria-label={item.ativo ? 'Suspender conta' : 'Reativar conta'}
-                                    disabled={alterandoStatusId !== null}
-                                    onClick={() => alterarStatusUsuario(item)}
-                                    style={{
-                                      width: 'auto',
-                                      minWidth: '150px',
-                                      marginTop: '12px',
-                                      borderColor: item.ativo ? '#dc5555' : '#ffd400',
-                                      color: item.ativo ? '#ff7777' : '#111',
-                                    }}
-                                  >
-                                    {alterandoStatusId === item.id
-                                      ? 'Processando...'
-                                      : item.ativo
-                                        ? '⏸ Suspender conta'
-                                        : '▶ Ativar conta'}
-                                  </button>
-                                )}
+                              {ehAdmin && item.id !== usuario.id && !pendente && (
+                                <button
+                                  type="button"
+                                  className={item.ativo ? 'logout' : 'login-button'}
+                                  title={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                  aria-label={item.ativo ? 'Suspender conta' : 'Reativar conta'}
+                                  disabled={alterandoStatusId !== null}
+                                  onClick={() => alterarStatusUsuario(item)}
+                                  style={{
+                                    width: 'auto',
+                                    minWidth: '150px',
+                                    marginTop: '12px',
+                                    borderColor: item.ativo ? '#dc5555' : '#ffd400',
+                                    color: item.ativo ? '#ff7777' : '#111',
+                                  }}
+                                >
+                                  {alterandoStatusId === item.id
+                                    ? 'Processando...'
+                                    : item.ativo
+                                      ? '⏸ Suspender conta'
+                                      : '▶ Ativar conta'}
+                                </button>
+                              )}
                             </span>
                           </article>
                         )
@@ -2074,16 +2241,14 @@ function App() {
             })()}
 
             {paginaAtual === 'configuracoes' && ehAdmin && (
-              <>
-                <section className="content-panel">
-                  <h3>Configurações da conta</h3>
-                  <div className="settings-row">
-                    <span><small>Nome</small>{perfil.nome}</span>
-                    <span><small>E-mail</small>{usuario.email}</span>
-                    <span><small>Perfil de acesso</small>{nomePerfil}</span>
-                  </div>
-                </section>
-              </>
+              <section className="content-panel">
+                <h3>Configurações da conta</h3>
+                <div className="settings-row">
+                  <span><small>Nome</small>{perfil.nome}</span>
+                  <span><small>E-mail</small>{usuario.email}</span>
+                  <span><small>Perfil de acesso</small>{nomePerfil}</span>
+                </div>
+              </section>
             )}
 
             <footer className="dashboard-footer">
@@ -2100,7 +2265,7 @@ function App() {
     <main className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">PM</div>
+          <img className="brand-logo" src="/logo-pmello.png" alt="P. MELLO Transportes" />
           <div>
             <h1>P. MELLO</h1>
             <span>TRANSPORTES</span>
@@ -2112,9 +2277,7 @@ function App() {
       <section className="welcome">
         <span className="eyebrow">CONTROLE DE DEVOLUÇÕES</span>
         <h2>Bem-vindo<br />à operação.</h2>
-        <p>
-          Entre com seu e-mail e senha para acessar o sistema de devoluções.
-        </p>
+        <p>Entre com seu e-mail e senha para acessar o sistema de devoluções.</p>
       </section>
 
       <section className="login-panel">
@@ -2144,12 +2307,14 @@ function App() {
                 required
               />
 
-              <div style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                marginTop: '-10px',
-                marginBottom: '18px',
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '-10px',
+                  marginBottom: '18px',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => mudarModo('recuperar')}
@@ -2191,8 +2356,7 @@ function App() {
           <>
             <h3>Solicitar acesso</h3>
             <p className="notice">
-              Preencha seus dados. O acesso à operação depende da aprovação
-              da equipe responsável.
+              Preencha seus dados. O acesso à operação depende da aprovação da equipe responsável.
             </p>
 
             <form onSubmit={cadastrar}>
@@ -2251,8 +2415,7 @@ function App() {
           <>
             <h3>Recuperar senha</h3>
             <p className="notice">
-              Informe seu e-mail cadastrado. Se a conta existir, enviaremos
-              um link de redefinição.
+              Informe seu e-mail cadastrado. Se a conta existir, enviaremos um link de redefinição.
             </p>
 
             <form onSubmit={recuperarSenha}>
