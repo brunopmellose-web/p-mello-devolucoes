@@ -193,6 +193,9 @@ function App() {
   const [modo, setModo] = useState('login')
 
   const [cidades, setCidades] = useState([])
+  const [cidadeCadastro, setCidadeCadastro] = useState('')
+  const [carregandoCidades, setCarregandoCidades] = useState(true)
+  const [erroCidades, setErroCidades] = useState('')
   const [devolucoes, setDevolucoes] = useState([])
   const [pendentes, setPendentes] = useState([])
   const [usuarios, setUsuarios] = useState([])
@@ -560,20 +563,41 @@ function App() {
   }, [carregarPerfil])
 
   useEffect(() => {
-    if (!usuario || !perfil) return
+    let ativo = true
 
-    async function carregarDados() {
+    async function carregarCidadesPublicas() {
+      setCarregandoCidades(true)
+      setErroCidades('')
+
       const { data, error } = await supabase
         .from('cities')
         .select('id, nome')
+        .eq('ativa', true)
         .order('nome')
 
+      if (!ativo) return
+
       if (error) {
-        setErro('Não foi possível carregar as cidades.')
+        setCidades([])
+        setErroCidades('Não foi possível carregar a lista de cidades. Atualize a página e tente novamente.')
       } else {
         setCidades(data || [])
       }
 
+      setCarregandoCidades(false)
+    }
+
+    carregarCidadesPublicas()
+
+    return () => {
+      ativo = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!usuario || !perfil) return
+
+    async function carregarDados() {
       await carregarDevolucoes()
 
       if (['admin', 'base'].includes(perfil.perfil)) {
@@ -621,13 +645,21 @@ function App() {
       return
     }
 
+    if (!cidadeCadastro) {
+      setErro('Selecione a cidade onde você mora ou presta serviço.')
+      return
+    }
+
     setEnviando(true)
 
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password: senha,
       options: {
-        data: { nome: nome.trim() },
+        data: {
+          nome: nome.trim(),
+          cidade_id: String(cidadeCadastro),
+        },
         emailRedirectTo: window.location.origin,
       },
     })
@@ -649,6 +681,7 @@ function App() {
 
     setSenha('')
     setNome('')
+    setCidadeCadastro('')
     setModo('login')
     setSucesso('Solicitação enviada! Confirme seu e-mail, se solicitado, e aguarde a aprovação.')
   }
@@ -2370,6 +2403,44 @@ function App() {
                 required
               />
 
+              <label htmlFor="cidadeCadastro">Cidade onde mora/presta serviço</label>
+              <select
+                id="cidadeCadastro"
+                name="cidadeCadastro"
+                value={cidadeCadastro}
+                onChange={(e) => setCidadeCadastro(e.target.value)}
+                required
+                disabled={carregandoCidades || cidades.length === 0 || enviando}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  minHeight: '48px',
+                  marginBottom: '18px',
+                  padding: '12px 14px',
+                  color: '#f5f5f5',
+                  backgroundColor: '#11151a',
+                  border: '1px solid #3a424d',
+                  borderRadius: '11px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  colorScheme: 'dark',
+                  cursor: carregandoCidades || cidades.length === 0 ? 'wait' : 'pointer',
+                }}
+              >
+                <option value="">
+                  {carregandoCidades ? 'Carregando cidades...' : 'Selecione sua cidade'}
+                </option>
+                {cidades.map((cidade) => (
+                  <option key={cidade.id} value={String(cidade.id)}>
+                    {cidade.nome}
+                  </option>
+                ))}
+              </select>
+              {erroCidades && <p className="error-message">{erroCidades}</p>}
+              {!carregandoCidades && !erroCidades && cidades.length === 0 && (
+                <p className="error-message">Nenhuma cidade ativa disponível para cadastro.</p>
+              )}
+
               <label htmlFor="email">E-mail</label>
               <input
                 id="email"
@@ -2396,7 +2467,7 @@ function App() {
               {erro && <p className="error-message">{erro}</p>}
               {sucesso && <p className="success-message">{sucesso}</p>}
 
-              <button className="login-button" type="submit" disabled={enviando}>
+              <button className="login-button" type="submit" disabled={enviando || carregandoCidades || cidades.length === 0}>
                 {enviando ? 'Enviando solicitação...' : 'Solicitar cadastro'}
               </button>
             </form>
